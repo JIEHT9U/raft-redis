@@ -72,11 +72,11 @@ func (zl *zapRaftLogger) Infof(format string, args ...interface{}) {
 	zl.sugar.Infof(format, args...)
 }
 
-func (zl *zapRaftLogger) Warning(args ...interface{}) {
+func (zl *zapRaftLogger) Warn(args ...interface{}) {
 	zl.sugar.Warn(args...)
 }
 
-func (zl *zapRaftLogger) Warningf(format string, args ...interface{}) {
+func (zl *zapRaftLogger) Warnf(format string, args ...interface{}) {
 	zl.sugar.Warnf(format, args...)
 }
 

@@ -25,9 +25,8 @@ import (
 
 // A key-value stream backed by raft
 type raftNode struct {
-	proposeC    <-chan string            // proposed messages (k,v)
 	confChangeC <-chan raftpb.ConfChange // proposed cluster config changes
-	commitC     chan<- *string           // entries committed to log (k,v)
+	commitC     chan *string             // entries committed to log (k,v)
 	errorC      chan<- error             // errors from raft session
 
 	id          int      // client ID for raft session
@@ -142,6 +141,7 @@ func (s *Server) publishEntries(ents []raftpb.Entry) bool {
 	return true
 }
 
+//Пробуем заргузить снапшот
 func (s *Server) loadSnapshot() (*raftpb.Snapshot, error) {
 	snapshot, err := s.raft.snapshotter.Load()
 	if err != nil && err != snap.ErrNoSnapshot {
@@ -178,38 +178,48 @@ func (s *Server) openWAL(snapshot *raftpb.Snapshot) (*wal.WAL, error) {
 	return w, nil
 }
 
-// replayWAL replays WAL entries into the raft instance.
+// replayWAL  повторяет записи WAL в экземпляр плота.
 func (s *Server) replayWAL() (*wal.WAL, error) {
 	s.logger.Infof("replaying WAL of member %d", s.raft.id)
 
+	////Пробуем заргузить снапшот
 	snapshot, err := s.loadSnapshot()
 	if err != nil {
 		return nil, err
 	}
 
+	//WAL используется для возврата данных с диска в память
+	//openWAL возвращает WALL, готовый для чтения.
 	w, err := s.openWAL(snapshot)
 	if err != nil {
 		return nil, err
 	}
 
+	//читаем данные с диска c помошью WAL
 	_, st, ents, err := w.ReadAll()
 	if err != nil {
 		return nil, fmt.Errorf("raftexample: failed to read WAL (%v)", err)
 	}
 
+	//Создаем новый raft Storage куда будут загружены данные из снапшота
 	s.raft.raftStorage = raft.NewMemoryStorage()
+
+	//Загружаем данные в storage если snapshot не пуст
 	if snapshot != nil {
 		s.raft.raftStorage.ApplySnapshot(*snapshot)
 	}
 	s.raft.raftStorage.SetHardState(st)
 
-	// append to storage so raft starts at the right place in log
+	//добавьте в хранилище, чтобы raft стартовал в нужном месте в журнале
 	s.raft.raftStorage.Append(ents)
 	// send nil once lastIndex is published so client knows commit channel is current
+	// отправить nil после опубликования последнего индекса, так что клиент знает, что канал фиксации текущий
 	if len(ents) > 0 {
 		s.raft.lastIndex = ents[len(ents)-1].Index
 	} else {
-		s.raft.commitC <- nil
+		go func() {
+			s.raft.commitC <- nil
+		}()
 	}
 	return w, nil
 }
@@ -231,15 +241,22 @@ func creteSnapDirIfNotExist(path string) error {
 	return nil
 }
 
-func (s *Server) startRaft() error {
+func (s *Server) initRaft() error {
 	var err error
+
+	//Определям функция с помошью которой будут делать снапшоты storage
+	s.raft.getSnapshot = s.GetSnapshot
+
+	//Создаём дерикротию где будут храниться snapshots
 	if err = creteSnapDirIfNotExist(s.raft.snapdir); err != nil {
 		return err
 	}
+
+	raft.SetLogger(raft.Logger(s.logger))
+
+	//Signals when snapshotter is ready
 	s.raft.snapshotter = snap.New(s.logger, s.raft.snapdir)
 	s.raft.snapshotterReady <- s.raft.snapshotter
-
-	oldwal := wal.Exist(s.raft.waldir)
 
 	if s.raft.wal, err = s.replayWAL(); err != nil {
 		return err
@@ -259,7 +276,7 @@ func (s *Server) startRaft() error {
 		MaxInflightMsgs: 256,
 	}
 
-	if oldwal {
+	if wal.Exist(s.raft.waldir) {
 		s.raft.node = raft.RestartNode(c)
 	} else {
 		startPeers := rpeers
@@ -285,9 +302,6 @@ func (s *Server) startRaft() error {
 			s.raft.transport.AddPeer(types.ID(i+1), []string{s.raft.peers[i]})
 		}
 	}
-
-	go s.serveRaft()
-	go s.serveChannels()
 	return nil
 }
 
@@ -326,22 +340,22 @@ func (s *Server) publishSnapshot(snapshotToSave raftpb.Snapshot) error {
 
 var snapshotCatchUpEntriesN uint64 = 10000
 
-func (s *Server) maybeTriggerSnapshot() {
+func (s *Server) maybeTriggerSnapshot() error {
 	if s.raft.appliedIndex-s.raft.snapshotIndex <= s.raft.snapCount {
-		return
+		return nil
 	}
 
 	s.logger.Infof("start snapshot [applied index: %d | last snapshot index: %d]", s.raft.appliedIndex, s.raft.snapshotIndex)
 	data, err := s.raft.getSnapshot()
 	if err != nil {
-		log.Panic(err)
+		return err
 	}
 	snap, err := s.raft.raftStorage.CreateSnapshot(s.raft.appliedIndex, &s.raft.confState, data)
 	if err != nil {
-		panic(err)
+		return err
 	}
 	if err := s.saveSnap(snap); err != nil {
-		panic(err)
+		return err
 	}
 
 	compactIndex := uint64(1)
@@ -349,18 +363,21 @@ func (s *Server) maybeTriggerSnapshot() {
 		compactIndex = s.raft.appliedIndex - snapshotCatchUpEntriesN
 	}
 	if err := s.raft.raftStorage.Compact(compactIndex); err != nil {
-		panic(err)
+		return err
 	}
 
 	s.logger.Infof("compacted log at index %d", compactIndex)
 	s.raft.snapshotIndex = s.raft.appliedIndex
+	return nil
 }
 
-func (s *Server) serveChannels() {
+func (s *Server) serveChannels() error {
+
 	snap, err := s.raft.raftStorage.Snapshot()
 	if err != nil {
-		panic(err)
+		return err
 	}
+
 	s.raft.confState = snap.Metadata.ConfState
 	s.raft.snapshotIndex = snap.Metadata.Index
 	s.raft.appliedIndex = snap.Metadata.Index
@@ -369,34 +386,6 @@ func (s *Server) serveChannels() {
 
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
-
-	// send proposals over raft
-	go func() {
-		var confChangeCount uint64 = 0
-
-		for s.raft.proposeC != nil && s.raft.confChangeC != nil {
-			select {
-			case prop, ok := <-s.raft.proposeC:
-				if !ok {
-					s.raft.proposeC = nil
-				} else {
-					// blocks until accepted by raft state machine
-					s.raft.node.Propose(context.TODO(), []byte(prop))
-				}
-
-			case cc, ok := <-s.raft.confChangeC:
-				if !ok {
-					s.raft.confChangeC = nil
-				} else {
-					confChangeCount++
-					cc.ID = confChangeCount
-					s.raft.node.ProposeConfChange(context.TODO(), cc)
-				}
-			}
-		}
-		// client closed channel; shutdown raft if not already
-		close(s.raft.stopc)
-	}()
 
 	// event loop on raft state machine updates
 	for {
@@ -416,27 +405,28 @@ func (s *Server) serveChannels() {
 			s.raft.transport.Send(rd.Messages)
 			nents, err := s.entriesToApply(rd.CommittedEntries)
 			if err != nil {
-				return
+				return err
 			}
 			if ok := s.publishEntries(nents); !ok {
 				s.stop()
-				return
+				return err
 			}
 			s.maybeTriggerSnapshot()
 			s.raft.node.Advance()
 
 		case err := <-s.raft.transport.ErrorC:
 			s.writeError(err)
-			return
+			return err
 
 		case <-s.raft.stopc:
 			s.stop()
-			return
+			return err
 		}
 	}
 }
 
 func (s *Server) serveRaft() error {
+	defer s.logger.Debug("serveRaft")
 	url, err := url.Parse(s.raft.peers[s.raft.id-1])
 	if err != nil {
 		return fmt.Errorf("raftexample: Failed parsing URL (%v)", err)

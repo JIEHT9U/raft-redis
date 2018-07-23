@@ -41,6 +41,10 @@ type resp struct {
 
 //New return new type *Server
 func New(initParam *i.Params, logger *zap.SugaredLogger, shutdown <-chan struct{}) *Server {
+
+	snapdir := fmt.Sprintf("raftexample-%d-snap", initParam.NodeID)
+	waldir := fmt.Sprintf("raftexample-%d", initParam.NodeID)
+
 	return &Server{
 		listenAddr: initParam.ListenAddr,
 		logger:     logger,
@@ -52,23 +56,21 @@ func New(initParam *i.Params, logger *zap.SugaredLogger, shutdown <-chan struct{
 		},
 		requests: make(chan request, 1),
 		raft: &raftNode{
-			proposeC:    make(chan string),
-			confChangeC: make(chan raftpb.ConfChange),
-			commitC:     make(chan *string),
-			errorC:      make(chan error),
-			id:          initParam.NodeID,
-			peers:       strings.Split(initParam.RaftPeers, ","),
-			join:        initParam.RaftJoin,
-			waldir:      fmt.Sprintf("raftexample-%d", initParam.NodeID),
-			snapdir:     fmt.Sprintf("raftexample-%d-snap", initParam.NodeID),
-			getSnapshot: func() ([]byte, error) { return nil, nil },
-			snapCount:   defaultSnapshotCount,
+			confChangeC:      make(chan raftpb.ConfChange),
+			commitC:          make(chan *string),
+			errorC:           make(chan error),
+			id:               initParam.NodeID,
+			peers:            strings.Split(initParam.RaftPeers, ","),
+			join:             initParam.RaftJoin,
+			waldir:           waldir,
+			snapdir:          snapdir,
+			snapCount:        defaultSnapshotCount,
+			snapshotterReady: make(chan *snap.Snapshotter, 1),
+
 			//Может потом удалю из за ненадобности
 			stopc:     make(chan struct{}),
 			httpstopc: make(chan struct{}),
 			httpdonec: make(chan struct{}),
-
-			snapshotterReady: make(chan *snap.Snapshotter, 1),
 		},
 	}
 }
@@ -102,16 +104,33 @@ func (s *Server) Run() error {
 		cansel()
 	})
 
-	//RAFT
+	//initRaft
+
+	if err := s.initRaft(); err != nil {
+		return err
+	}
+
 	g.Add(func() error {
-		s.logger.Info("Start RAFT")
-		return s.startRaft()
+		s.logger.Info("Start serveRaft")
+		return s.serveRaft()
 	}, func(err error) {
 		if err != nil {
-			s.logger.Errorf("Error RAFT loop %s", err)
+			s.logger.Errorf("Error serveRaft loop %s", err)
 		} else {
-			s.logger.Info("Exit RAFT loop")
+			s.logger.Info("Exit serveRaft loop")
 		}
+	})
+
+	g.Add(func() error {
+		s.logger.Info("Start serveChannels")
+		return s.serveChannels()
+	}, func(err error) {
+		if err != nil {
+			s.logger.Errorf("Error serveChannels loop %s", err)
+		} else {
+			s.logger.Info("Exit serveChannels loop")
+		}
+		s.stop()
 	})
 
 	//Shutdown
@@ -177,35 +196,68 @@ func (s *Server) connHandler(conn net.Conn) {
 }
 
 func (s *Server) runServer(ctx context.Context) error {
+	var confChangeCount uint64
+
 	// defer close(s.requests)  !!!!!!!!!
+
 	for {
 		select {
-		case cmd := <-s.requests:
-			switch cmd.cmd.actions {
-			case set:
-				s.st.stringsStorage.Set(cmd.cmd.key, cmd.cmd.values[0], cmd.cmd.expire)
-				if err := responceWraper(cmd.response, []byte("success"), nil); err != nil {
-					s.logger.Error(err)
-				}
-				continue
-			case get:
-				data, err := s.st.stringsStorage.Get(cmd.cmd.key)
-				if err := responceWraper(cmd.response, data, err); err != nil {
-					s.logger.Error(err)
-				}
-				continue
-			case del:
-				s.st.stringsStorage.Del(cmd.cmd.key)
-				if err := responceWraper(cmd.response, []byte("success"), nil); err != nil {
-					s.logger.Error(err)
-				}
-				continue
+
+		case cc, ok := <-s.raft.confChangeC:
+			if !ok {
+				s.raft.confChangeC = nil
+			} else {
+				confChangeCount++
+				cc.ID = confChangeCount
+				s.raft.node.ProposeConfChange(context.TODO(), cc)
 			}
 
+			//Propose
+		case cmd := <-s.requests:
+			s.logger.Debug("cmd:", cmd.cmd)
+			//blocks до тех пор, пока их не примет машина
+			err := s.raft.node.Propose(context.TODO(), []byte(cmd.cmd.values[0]))
+			if err != nil {
+				s.logger.Error(err)
+			}
+
+			if err := responceWraper(cmd.response, []byte("success"), nil); err != nil {
+				s.logger.Error(err)
+			}
+			//END RAFT
+
+			// switch cmd.cmd.actions {
+			// case set:
+			// 	s.st.stringsStorage.Set(cmd.cmd.key, cmd.cmd.values[0], cmd.cmd.expire)
+			// 	if err := responceWraper(cmd.response, []byte("success"), nil); err != nil {
+			// 		s.logger.Error(err)
+			// 	}
+			// 	continue
+			// case get:
+			// 	data, err := s.st.stringsStorage.Get(cmd.cmd.key)
+			// 	if err := responceWraper(cmd.response, data, err); err != nil {
+			// 		s.logger.Error(err)
+			// 	}
+			// 	continue
+			// case del:
+			// 	s.st.stringsStorage.Del(cmd.cmd.key)
+			// 	if err := responceWraper(cmd.response, []byte("success"), nil); err != nil {
+			// 		s.logger.Error(err)
+			// 	}
+			// 	continue
+			// }
+
+		case <-s.raft.commitC:
+			s.logger.Debug("Log Recive Data !!")
 		case <-ctx.Done():
 			return nil
 		}
 	}
+}
+
+//GetSnapshot func
+func (s *Server) GetSnapshot() ([]byte, error) {
+	return []byte{}, nil
 }
 
 func responceWraper(response chan resp, data []byte, err error) error {
