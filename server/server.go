@@ -94,7 +94,11 @@ func (s *Server) Run() error {
 		s.logger.Info("Start main loop")
 		return s.runServer(ctx)
 	}, func(err error) {
-		s.logger.Info("Exit main loop")
+		if err != nil {
+			s.logger.Errorf("Error exit main loop %s", err)
+		} else {
+			s.logger.Info("Exit main loop")
+		}
 		cansel()
 	})
 
@@ -102,7 +106,13 @@ func (s *Server) Run() error {
 	g.Add(func() error {
 		s.logger.Info("Start RAFT")
 		return s.startRaft()
-	}, func(err error) {})
+	}, func(err error) {
+		if err != nil {
+			s.logger.Errorf("Error RAFT loop %s", err)
+		} else {
+			s.logger.Info("Exit RAFT loop")
+		}
+	})
 
 	//Shutdown
 	g.Add(func() error {

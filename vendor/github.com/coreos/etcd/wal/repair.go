@@ -27,7 +27,7 @@ import (
 
 // Repair tries to repair ErrUnexpectedEOF in the
 // last wal file by truncating.
-func Repair(lg *zap.Logger, dirpath string) bool {
+func Repair(lg *zap.SugaredLogger, dirpath string) bool {
 	f, err := openLast(lg, dirpath)
 	if err != nil {
 		return false
@@ -131,7 +131,7 @@ func Repair(lg *zap.Logger, dirpath string) bool {
 }
 
 // openLast opens the last wal file for read and write.
-func openLast(lg *zap.Logger, dirpath string) (*fileutil.LockedFile, error) {
+func openLast(lg *zap.SugaredLogger, dirpath string) (*fileutil.LockedFile, error) {
 	names, err := readWALNames(lg, dirpath)
 	if err != nil {
 		return nil, err

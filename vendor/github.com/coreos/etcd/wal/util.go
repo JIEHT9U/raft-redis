@@ -38,7 +38,7 @@ func Exist(dir string) bool {
 // searchIndex returns the last array index of names whose raft index section is
 // equal to or smaller than the given index.
 // The given names MUST be sorted.
-func searchIndex(lg *zap.Logger, names []string, index uint64) (int, bool) {
+func searchIndex(lg *zap.SugaredLogger, names []string, index uint64) (int, bool) {
 	for i := len(names) - 1; i >= 0; i-- {
 		name := names[i]
 		_, curIndex, err := parseWALName(name)
@@ -58,7 +58,7 @@ func searchIndex(lg *zap.Logger, names []string, index uint64) (int, bool) {
 
 // names should have been sorted based on sequence number.
 // isValidSeq checks whether seq increases continuously.
-func isValidSeq(lg *zap.Logger, names []string) bool {
+func isValidSeq(lg *zap.SugaredLogger, names []string) bool {
 	var lastSeq uint64
 	for _, name := range names {
 		curSeq, _, err := parseWALName(name)
@@ -77,7 +77,7 @@ func isValidSeq(lg *zap.Logger, names []string) bool {
 	return true
 }
 
-func readWALNames(lg *zap.Logger, dirpath string) ([]string, error) {
+func readWALNames(lg *zap.SugaredLogger, dirpath string) ([]string, error) {
 	names, err := fileutil.ReadDir(dirpath)
 	if err != nil {
 		return nil, err
@@ -89,7 +89,7 @@ func readWALNames(lg *zap.Logger, dirpath string) ([]string, error) {
 	return wnames, nil
 }
 
-func checkWalNames(lg *zap.Logger, names []string) []string {
+func checkWalNames(lg *zap.SugaredLogger, names []string) []string {
 	wnames := make([]string, 0)
 	for _, name := range names {
 		if _, _, err := parseWALName(name); err != nil {

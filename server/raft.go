@@ -157,7 +157,7 @@ func (s *Server) openWAL(snapshot *raftpb.Snapshot) (*wal.WAL, error) {
 			return nil, fmt.Errorf("raftexample: cannot create dir for wal (%v)", err)
 		}
 
-		w, err := wal.Create(zap.NewExample(), s.raft.waldir, nil)
+		w, err := wal.Create(s.logger, s.raft.waldir, nil)
 		if err != nil {
 			return nil, fmt.Errorf("raftexample: create wal error (%v)", err)
 		}
@@ -169,7 +169,8 @@ func (s *Server) openWAL(snapshot *raftpb.Snapshot) (*wal.WAL, error) {
 		walsnap.Index, walsnap.Term = snapshot.Metadata.Index, snapshot.Metadata.Term
 	}
 	s.logger.Infof("loading WAL at term %d and index %d", walsnap.Term, walsnap.Index)
-	w, err := wal.Open(zap.NewExample(), s.raft.waldir, walsnap)
+
+	w, err := wal.Open(s.logger, s.raft.waldir, walsnap)
 	if err != nil {
 		return nil, fmt.Errorf("raftexample: error loading wal (%v)", err)
 	}
@@ -235,7 +236,6 @@ func (s *Server) startRaft() error {
 	if err = creteSnapDirIfNotExist(s.raft.snapdir); err != nil {
 		return err
 	}
-
 	s.raft.snapshotter = snap.New(s.logger, s.raft.snapdir)
 	s.raft.snapshotterReady <- s.raft.snapshotter
 
@@ -249,6 +249,7 @@ func (s *Server) startRaft() error {
 	for i := range rpeers {
 		rpeers[i] = raft.Peer{ID: uint64(i + 1)}
 	}
+
 	c := &raft.Config{
 		ID:              uint64(s.raft.id),
 		ElectionTick:    10,
