@@ -297,6 +297,7 @@ func (s *Server) initRaft() error {
 	}
 
 	s.raft.transport.Start()
+
 	for i := range s.raft.peers {
 		if i+1 != s.raft.id {
 			s.raft.transport.AddPeer(types.ID(i+1), []string{s.raft.peers[i]})
@@ -411,7 +412,9 @@ func (s *Server) serveChannels() error {
 				s.stop()
 				return err
 			}
-			s.maybeTriggerSnapshot()
+			if err := s.maybeTriggerSnapshot(); err != nil {
+				return err
+			}
 			s.raft.node.Advance()
 
 		case err := <-s.raft.transport.ErrorC:

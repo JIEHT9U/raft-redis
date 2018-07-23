@@ -2,11 +2,11 @@ package server
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"net"
 	"strings"
-
-	"context"
+	"time"
 
 	i "github.com/JIEHT9U/raft-redis/init"
 	"github.com/JIEHT9U/raft-redis/list"
@@ -216,12 +216,13 @@ func (s *Server) runServer(ctx context.Context) error {
 		case cmd := <-s.requests:
 			s.logger.Debug("cmd:", cmd.cmd)
 			//blocks до тех пор, пока их не примет машина
-			err := s.raft.node.Propose(context.TODO(), []byte(cmd.cmd.values[0]))
+			ctx, _ := context.WithTimeout(context.Background(), time.Second*2)
+			err := s.raft.node.Propose(ctx, []byte(cmd.cmd.values[0]))
 			if err != nil {
 				s.logger.Error(err)
 			}
 
-			if err := responceWraper(cmd.response, []byte("success"), nil); err != nil {
+			if err := responceWraper(cmd.response, []byte("OLOLOLO"), nil); err != nil {
 				s.logger.Error(err)
 			}
 			//END RAFT
