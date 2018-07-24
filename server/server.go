@@ -56,7 +56,7 @@ func New(initParam *i.Params, logger *zap.SugaredLogger, shutdown <-chan struct{
 		requests: make(chan request, 1),
 		raft: &raftNode{
 			confChangeC:      make(chan raftpb.ConfChange),
-			commitC:          make(chan *string),
+			commitC:          make(chan *string, 1),
 			errorC:           make(chan error),
 			id:               initParam.NodeID,
 			peers:            strings.Split(initParam.RaftPeers, ","),
@@ -100,7 +100,6 @@ func (s *Server) Run() error {
 	})
 
 	//initRaft
-
 	raftListener, err := s.createRAFTListener()
 	if err != nil {
 		return errors.Wrap(err, "Error create RAFT Listener")
@@ -118,13 +117,14 @@ func (s *Server) Run() error {
 
 	g.Add(func() error {
 		s.logger.Info("Start serveChannels")
-		return s.serveChannels()
+		return s.serveChannels(ctx)
 	}, func(err error) {
 		if err != nil {
 			s.logger.Errorf("Error serveChannels loop %s", err)
 		} else {
 			s.logger.Info("Exit serveChannels loop")
 		}
+		cansel()
 	})
 
 	//Shutdown
@@ -197,15 +197,11 @@ func (s *Server) runServer(ctx context.Context) error {
 	for {
 		select {
 
-		case cc, ok := <-s.raft.confChangeC:
-			if !ok {
-				s.raft.confChangeC = nil
-			} else {
-				confChangeCount++
-				cc.ID = confChangeCount
-				s.raft.node.ProposeConfChange(context.TODO(), cc)
-			}
-
+		// send proposals over raft
+		case cc := <-s.raft.confChangeC:
+			confChangeCount++
+			cc.ID = confChangeCount
+			s.raft.node.ProposeConfChange(context.TODO(), cc)
 			//Propose
 		case cmd := <-s.requests:
 			s.logger.Debug("cmd:", cmd.cmd)

@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -138,8 +137,7 @@ func (s *Server) InitRaft() error {
 	raft.SetLogger(raft.Logger(s.logger))
 
 	//Signals when snapshotter is ready
-	// s.raft.snapshotter = snap.New(s.logger, s.raft.snapdir)
-	// s.raft.snapshotterReady <- s.raft.snapshotter
+	s.raft.snapshotterReady <- s.raft.snapshotter
 
 	if s.raft.wal, err = s.replayWAL(); err != nil {
 		return err
@@ -193,6 +191,7 @@ func (s *Server) InitRaft() error {
 	}
 
 	return nil
+
 }
 
 func (s *Server) runRAFTListener(ln *net.TCPListener) error {
@@ -208,64 +207,99 @@ func (s *Server) runRAFTListener(ln *net.TCPListener) error {
 	}).Serve(ln)
 }
 
-func (s *Server) serveChannels() error {
+func (s *Server) serveChannels(ctx context.Context) error {
 
-	snap, err := s.raft.raftStorage.Snapshot()
-	if err != nil {
-		return err
+	defer s.raft.wal.Close()
+
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+
+	// event loop on raft state machine updates
+	for {
+		select {
+		case <-ticker.C:
+			s.raft.node.Tick()
+
+		// store raft entries to wal, then publish over commit channel
+		case rd := <-s.raft.node.Ready():
+			s.raft.wal.Save(rd.HardState, rd.Entries)
+			if !raft.IsEmptySnap(rd.Snapshot) {
+				s.saveSnap(rd.Snapshot)
+				s.raft.raftStorage.ApplySnapshot(rd.Snapshot)
+				s.publishSnapshot(rd.Snapshot)
+			}
+			s.raft.raftStorage.Append(rd.Entries)
+			s.raft.transport.Send(rd.Messages)
+			nents, err := s.entriesToApply(rd.CommittedEntries)
+			if err != nil {
+				return err
+			}
+			if err := s.publishEntries(ctx, nents); err != nil {
+				return err
+			}
+			if err := s.maybeTriggerSnapshot(); err != nil {
+				return err
+			}
+			s.raft.node.Advance()
+			s.logger.Debug("Log Recive Data !!")
+		case <-ctx.Done():
+			return nil
+		}
 	}
 
-	PrePrint, _ := json.MarshalIndent(snap, "", "  ")
-	s.logger.Debug("snap:", string(PrePrint))
+}
+
+// publishEntries writes committed log entries to commit channel and returns
+// whether all entries could be published.
+func (s *Server) publishEntries(ctx context.Context, ents []raftpb.Entry) error {
+	for i := range ents {
+		switch ents[i].Type {
+		case raftpb.EntryNormal:
+			if len(ents[i].Data) == 0 {
+				// ignore empty messages
+				s.logger.Debug("Recive emty MSG")
+				break
+			}
+			srt := string(ents[i].Data)
+			select {
+			case s.raft.commitC <- &srt:
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+
+		case raftpb.EntryConfChange:
+			var cc raftpb.ConfChange
+			if err := cc.Unmarshal(ents[i].Data); err != nil {
+				return err
+			}
+			s.raft.confState = *s.raft.node.ApplyConfChange(cc)
+
+			switch cc.Type {
+			case raftpb.ConfChangeAddNode:
+				if len(cc.Context) > 0 {
+					s.raft.transport.AddPeer(types.ID(cc.NodeID), []string{string(cc.Context)})
+				}
+			case raftpb.ConfChangeRemoveNode:
+				if cc.NodeID == uint64(s.raft.id) {
+					return errors.New("I've been removed from the cluster! Shutting down")
+				}
+				s.raft.transport.RemovePeer(types.ID(cc.NodeID))
+			}
+		}
+
+		// after commit, update appliedIndex
+		s.raft.appliedIndex = ents[i].Index
+
+		// special nil commit to signal replay has finished
+		if ents[i].Index == s.raft.lastIndex {
+			select {
+			case s.raft.commitC <- nil:
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+	}
 	return nil
-
-	// s.raft.confState = snap.Metadata.ConfState
-	// s.raft.snapshotIndex = snap.Metadata.Index
-	// s.raft.appliedIndex = snap.Metadata.Index
-
-	// defer s.raft.wal.Close()
-
-	// ticker := time.NewTicker(100 * time.Millisecond)
-	// defer ticker.Stop()
-
-	// // event loop on raft state machine updates
-	// for {
-	// 	select {
-	// 	case <-ticker.C:
-	// 		s.raft.node.Tick()
-
-	// 	// store raft entries to wal, then publish over commit channel
-	// 	case rd := <-s.raft.node.Ready():
-	// 		s.raft.wal.Save(rd.HardState, rd.Entries)
-	// 		if !raft.IsEmptySnap(rd.Snapshot) {
-	// 			s.saveSnap(rd.Snapshot)
-	// 			s.raft.raftStorage.ApplySnapshot(rd.Snapshot)
-	// 			s.publishSnapshot(rd.Snapshot)
-	// 		}
-	// 		s.raft.raftStorage.Append(rd.Entries)
-	// 		s.raft.transport.Send(rd.Messages)
-	// 		nents, err := s.entriesToApply(rd.CommittedEntries)
-	// 		if err != nil {
-	// 			return err
-	// 		}
-	// 		if ok := s.publishEntries(nents); !ok {
-	// 			s.stop()
-	// 			return err
-	// 		}
-	// 		if err := s.maybeTriggerSnapshot(); err != nil {
-	// 			return err
-	// 		}
-	// 		s.raft.node.Advance()
-
-	// 	case err := <-s.raft.transport.ErrorC:
-	// 		s.writeError(err)
-	// 		return err
-
-	// 	case <-s.raft.stopc:
-	// 		s.stop()
-	// 		return err
-	// 	}
-	// }
 }
 
 func (s *Server) Process(ctx context.Context, m raftpb.Message) error {

@@ -67,19 +67,26 @@ func (s *Server) replayWAL() (*wal.WAL, error) {
 	//Загружаем данные в storage если snapshot не пуст
 	if snapshot != nil {
 		s.raft.raftStorage.ApplySnapshot(*snapshot)
+
+		s.raft.confState = snapshot.Metadata.ConfState
+		s.raft.snapshotIndex = snapshot.Metadata.Index
+		s.raft.appliedIndex = snapshot.Metadata.Index
 	}
 	s.raft.raftStorage.SetHardState(st)
 
 	//добавьте в хранилище, чтобы raft стартовал в нужном месте в журнале
 	s.raft.raftStorage.Append(ents)
+
+	// s.raft.confState = snapshot.Metadata.ConfState
+	// s.raft.snapshotIndex = snapshot.Metadata.Index
+	// s.raft.appliedIndex = snapshot.Metadata.Index
+
 	// send nil once lastIndex is published so client knows commit channel is current
 	// отправить nil после опубликования последнего индекса, так что клиент знает, что канал фиксации текущий
 	if len(ents) > 0 {
 		s.raft.lastIndex = ents[len(ents)-1].Index
 	} else {
-		go func() {
-			s.raft.commitC <- nil
-		}()
+		s.raft.commitC <- nil
 	}
 	return w, nil
 }
