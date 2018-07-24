@@ -10,10 +10,11 @@ import (
 
 //Params type
 type Params struct {
-	ListenAddr *net.TCPAddr
-	RaftPeers  string
-	RaftJoin   bool
-	NodeID     int
+	ListenAddr  *net.TCPAddr
+	RaftPeers   string
+	RaftJoin    bool
+	NodeID      int
+	RaftDataDir string
 }
 
 //Param return init param
@@ -32,6 +33,11 @@ func Param() (*Params, error) {
 		Envar("INITIAL_CLUSTER").
 		Default("http://127.0.0.1:9021").
 		StringVar(&init.RaftPeers)
+
+	a.Flag("raft-data-dir", "data dir").
+		Envar("RAFT_DATA_DIR").
+		Default("data").
+		StringVar(&init.RaftDataDir)
 
 	a.Flag("join", "join an existing cluster").
 		Envar("JOIN").

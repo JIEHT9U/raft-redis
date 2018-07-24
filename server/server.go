@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/url"
 	"strings"
 	"time"
 
@@ -41,9 +42,7 @@ type resp struct {
 
 //New return new type *Server
 func New(initParam *i.Params, logger *zap.SugaredLogger, shutdown <-chan struct{}) *Server {
-
-	snapdir := fmt.Sprintf("raftexample-%d-snap", initParam.NodeID)
-	waldir := fmt.Sprintf("raftexample-%d", initParam.NodeID)
+	snapDir := fmt.Sprintf("%s-%d-snap", initParam.RaftDataDir, initParam.NodeID)
 
 	return &Server{
 		listenAddr: initParam.ListenAddr,
@@ -62,15 +61,11 @@ func New(initParam *i.Params, logger *zap.SugaredLogger, shutdown <-chan struct{
 			id:               initParam.NodeID,
 			peers:            strings.Split(initParam.RaftPeers, ","),
 			join:             initParam.RaftJoin,
-			waldir:           waldir,
-			snapdir:          snapdir,
+			snapdir:          snapDir,
+			waldir:           fmt.Sprintf("%s-%d", initParam.RaftDataDir, initParam.NodeID),
 			snapCount:        defaultSnapshotCount,
 			snapshotterReady: make(chan *snap.Snapshotter, 1),
-
-			//Может потом удалю из за ненадобности
-			stopc:     make(chan struct{}),
-			httpstopc: make(chan struct{}),
-			httpdonec: make(chan struct{}),
+			snapshotter:      snap.New(logger, snapDir),
 		},
 	}
 }
@@ -106,19 +101,19 @@ func (s *Server) Run() error {
 
 	//initRaft
 
-	if err := s.initRaft(); err != nil {
-		return err
+	raftListener, err := s.createRAFTListener()
+	if err != nil {
+		return errors.Wrap(err, "Error create RAFT Listener")
 	}
-
 	g.Add(func() error {
-		s.logger.Info("Start serveRaft")
-		return s.serveRaft()
+		return s.runRAFTListener(raftListener)
 	}, func(err error) {
 		if err != nil {
-			s.logger.Errorf("Error serveRaft loop %s", err)
+			s.logger.Errorf("Error RAFT Listener %s", err)
 		} else {
-			s.logger.Info("Exit serveRaft loop")
+			s.logger.Info("Exit RAFT Listener")
 		}
+		raftListener.Close()
 	})
 
 	g.Add(func() error {
@@ -130,7 +125,6 @@ func (s *Server) Run() error {
 		} else {
 			s.logger.Info("Exit serveChannels loop")
 		}
-		s.stop()
 	})
 
 	//Shutdown
@@ -257,7 +251,7 @@ func (s *Server) runServer(ctx context.Context) error {
 }
 
 //GetSnapshot func
-func (s *Server) GetSnapshot() ([]byte, error) {
+func (s *Server) getSnapshot() ([]byte, error) {
 	return []byte{}, nil
 }
 
@@ -269,4 +263,17 @@ func responceWraper(response chan resp, data []byte, err error) error {
 		close(response)
 		return fmt.Errorf("Error send response MSG [%s]", string(data))
 	}
+}
+
+func (s *Server) createRAFTListener() (*net.TCPListener, error) {
+
+	url, err := url.Parse(s.raft.peers[s.raft.id-1])
+	if err != nil {
+		return nil, fmt.Errorf("raftexample: Failed parsing URL (%v)", err)
+	}
+	ln, err := net.Listen("tcp", url.Host)
+	if err != nil {
+		return nil, err
+	}
+	return ln.(*net.TCPListener), nil
 }

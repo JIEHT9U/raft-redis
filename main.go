@@ -43,9 +43,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	server := server.New(initParams, logging.Sugar(), signal.SetupSignalHandler())
+	srv := server.New(initParams, logging.Sugar(), signal.SetupSignalHandler())
 
-	if err := server.Run(); err != nil {
+	if err := srv.InitRaft(); err != nil {
+		fmt.Fprint(os.Stderr, err)
+		os.Exit(1)
+	}
+
+	if err := srv.Run(); err != nil {
 		fmt.Fprint(os.Stderr, err)
 		os.Exit(1)
 	}
