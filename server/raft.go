@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"time"
 
+	ll "github.com/JIEHT9U/raft-redis/logger"
 	"github.com/coreos/etcd/etcdserver/api/rafthttp"
 	"github.com/coreos/etcd/etcdserver/api/snap"
 	stats "github.com/coreos/etcd/etcdserver/api/v2stats"
@@ -98,7 +99,8 @@ func (s *Server) InitRaft() error {
 	if err = creteSnapDirIfNotExist(s.raft.snapdir); err != nil {
 		return err
 	}
-	raft.SetLogger(raft.Logger(s.logger))
+	raft.SetLogger(raft.Logger(ll.NewZapLoggerRaft(s.logger)))
+	// raft.SetLogger(raft.Logger(s.logger))
 
 	//Signals when snapshotter is ready
 	s.raft.snapshotterReady <- s.raft.snapshotter

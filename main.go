@@ -43,7 +43,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	srv := server.New(initParams, logging.Sugar(), signal.SetupSignalHandler())
+	srv := server.New(initParams, logging, signal.SetupSignalHandler())
 
 	if err := srv.InitRaft(); err != nil {
 		fmt.Fprint(os.Stderr, err)

@@ -7,6 +7,7 @@ import (
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/coreos/etcd/wal"
 	"github.com/coreos/etcd/wal/walpb"
+	"go.uber.org/zap"
 )
 
 // openWAL returns a WAL ready for reading.
@@ -16,7 +17,7 @@ func (s *Server) openWAL(snapshot *raftpb.Snapshot) (*wal.WAL, error) {
 			return nil, fmt.Errorf("cannot create dir for wal (%v)", err)
 		}
 
-		w, err := wal.Create(s.logger, s.raft.waldir, nil)
+		w, err := wal.Create(zap.NewExample(), s.raft.waldir, nil)
 		if err != nil {
 			return nil, fmt.Errorf("create wal error (%v)", err)
 		}
@@ -29,7 +30,7 @@ func (s *Server) openWAL(snapshot *raftpb.Snapshot) (*wal.WAL, error) {
 	}
 	s.logger.Infof("loading WAL at term %d and index %d", walsnap.Term, walsnap.Index)
 
-	w, err := wal.Open(s.logger, s.raft.waldir, walsnap)
+	w, err := wal.Open(zap.NewExample(), s.raft.waldir, walsnap)
 	if err != nil {
 		return nil, fmt.Errorf("error loading wal (%v)", err)
 	}

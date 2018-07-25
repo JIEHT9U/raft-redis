@@ -94,49 +94,49 @@ type ZapLoggerRaft struct {
 }
 
 func (l *ZapLoggerRaft) Debug(v ...interface{}) {
-	l.loger.Debug(v)
+	l.loger.Debug(v...)
 }
 
 func (l *ZapLoggerRaft) Debugf(format string, v ...interface{}) {
-	l.loger.Debugf(format, v)
+	l.loger.Debugf(format, v...)
 }
 
 func (l *ZapLoggerRaft) Error(v ...interface{}) {
-	l.loger.Error(v)
+	l.loger.Error(v...)
 }
 
 func (l *ZapLoggerRaft) Errorf(format string, v ...interface{}) {
-	l.loger.Errorf(format, v)
+	l.loger.Errorf(format, v...)
 }
 
 func (l *ZapLoggerRaft) Info(v ...interface{}) {
-	l.loger.Info(v)
+	l.loger.Info(v...)
 }
 
 func (l *ZapLoggerRaft) Infof(format string, v ...interface{}) {
-	l.loger.Infof(format, v)
+	l.loger.Infof(format, v...)
 }
 
 func (l *ZapLoggerRaft) Warning(v ...interface{}) {
-	l.loger.Warn(v)
+	l.loger.Warn(v...)
 }
 
 func (l *ZapLoggerRaft) Warningf(format string, v ...interface{}) {
-	l.loger.Warn(format, v)
+	l.loger.Warnf(format, v...)
 }
 
 func (l *ZapLoggerRaft) Fatal(v ...interface{}) {
-	l.loger.Fatal(v)
+	l.loger.Fatal(v...)
 }
 
 func (l *ZapLoggerRaft) Fatalf(format string, v ...interface{}) {
-	l.loger.Fatalf(format, v)
+	l.loger.Fatalf(format, v...)
 }
 
 func (l *ZapLoggerRaft) Panic(v ...interface{}) {
-	l.loger.Panic(v)
+	l.loger.Panic(v...)
 }
 
 func (l *ZapLoggerRaft) Panicf(format string, v ...interface{}) {
-	l.loger.Panicf(format, v)
+	l.loger.Panicf(format, v...)
 }

@@ -12,8 +12,6 @@ import (
 	"strings"
 	"time"
 
-	ll "github.com/JIEHT9U/raft-redis/logger"
-
 	i "github.com/JIEHT9U/raft-redis/init"
 	"github.com/JIEHT9U/raft-redis/list"
 	"github.com/JIEHT9U/raft-redis/str"
@@ -48,13 +46,13 @@ type resp struct {
 }
 
 //New return new type *Server
-func New(initParam *i.Params, logger *zap.SugaredLogger, shutdown <-chan struct{}) *Server {
+func New(initParam *i.Params, logger *zap.Logger, shutdown <-chan struct{}) *Server {
 	snapDir := fmt.Sprintf("%s/%d/snap", initParam.RaftDataDir, initParam.NodeID)
 
 	return &Server{
 		getSnap:    make(chan storages),
 		listenAddr: initParam.ListenAddr,
-		logger:     logger,
+		logger:     logger.Sugar(),
 		shutdown:   shutdown,
 		st: storages{
 			listStorage:       make(map[string]list.Store),
@@ -74,12 +72,14 @@ func New(initParam *i.Params, logger *zap.SugaredLogger, shutdown <-chan struct{
 			snapCount:        defaultSnapshotCount,
 			snapdir:          snapDir,
 			snapshotterReady: make(chan *snap.Snapshotter, 1),
-			snapshotter:      snap.New(ll.NewZapLoggerRaft(logger), snapDir),
+			snapshotter:      snap.New(logger, snapDir),
+			// snapshotter:      snap.New(ll.NewZapLoggerRaft(logger), snapDir),
 
 			//Создаем новый raft Storage куда будут загружены данные из снапшота
 			raftStorage: raft.NewMemoryStorage(),
 		},
 	}
+
 }
 
 //Run running main process
