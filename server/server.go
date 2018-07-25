@@ -2,7 +2,10 @@ package server
 
 import (
 	"bufio"
+	"bytes"
 	"context"
+	"encoding/gob"
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/url"
@@ -43,7 +46,7 @@ type resp struct {
 
 //New return new type *Server
 func New(initParam *i.Params, logger *zap.SugaredLogger, shutdown <-chan struct{}) *Server {
-	snapDir := fmt.Sprintf("%s/snap-%d", initParam.RaftDataDir, initParam.NodeID)
+	snapDir := fmt.Sprintf("%s/%d/snap", initParam.RaftDataDir, initParam.NodeID)
 
 	return &Server{
 		listenAddr: initParam.ListenAddr,
@@ -56,15 +59,14 @@ func New(initParam *i.Params, logger *zap.SugaredLogger, shutdown <-chan struct{
 		},
 		requests: make(chan request, 1),
 		raft: &raftNode{
+			id:               initParam.NodeID,
+			join:             initParam.RaftJoin,
 			confChangeC:      make(chan raftpb.ConfChange),
 			commitC:          make(chan *string, 1),
-			errorC:           make(chan error),
-			id:               initParam.NodeID,
 			peers:            strings.Split(initParam.RaftPeers, ","),
-			join:             initParam.RaftJoin,
-			snapdir:          snapDir,
-			waldir:           fmt.Sprintf("%s/wal-%d", initParam.RaftDataDir, initParam.NodeID),
+			waldir:           fmt.Sprintf("%s/%d/wal", initParam.RaftDataDir, initParam.NodeID),
 			snapCount:        defaultSnapshotCount,
+			snapdir:          snapDir,
 			snapshotterReady: make(chan *snap.Snapshotter, 1),
 			snapshotter:      snap.New(logger, snapDir),
 
@@ -86,7 +88,7 @@ func (s *Server) Run() error {
 		s.logger.Infof("TCP listener %s", s.listenAddr.String())
 		return s.runTCPListener(listener)
 	}, func(err error) {
-		s.logger.Info("Stop TCP listener")
+		s.errorsWraps(err, "Error stop TCP listener", "Stop TCP listener")
 		listener.Close()
 	})
 
@@ -95,39 +97,27 @@ func (s *Server) Run() error {
 		s.logger.Info("Start main loop")
 		return s.runServer(ctx)
 	}, func(err error) {
-		if err != nil {
-			s.logger.Errorf("Error exit main loop %s", err)
-		} else {
-			s.logger.Info("Exit main loop")
-		}
+		s.errorsWraps(err, "Error exit main loop", "Exit main loop")
 		cansel()
 	})
 
 	//initRaft
-	// raftListener, err := s.createRAFTListener()
-	// if err != nil {
-	// 	return errors.Wrap(err, "Error create RAFT Listener")
-	// }
-	// g.Add(func() error {
-	// 	return s.runRAFTListener(raftListener)
-	// }, func(err error) {
-	// 	if err != nil {
-	// 		s.logger.Errorf("Error RAFT Listener %s", err)
-	// 	} else {
-	// 		s.logger.Info("Exit RAFT Listener")
-	// 	}
-	// 	raftListener.Close()
-	// })
+	raftListener, err := s.createRAFTListener()
+	if err != nil {
+		return errors.Wrap(err, "Error create RAFT Listener")
+	}
+	g.Add(func() error {
+		return s.runRAFTListener(raftListener)
+	}, func(err error) {
+		s.errorsWraps(err, "Error RAFT Listener", "Exit RAFT Listener")
+		raftListener.Close()
+	})
 
 	g.Add(func() error {
 		s.logger.Info("Start serveChannels")
 		return s.serveChannels(ctx)
 	}, func(err error) {
-		if err != nil {
-			s.logger.Errorf("Error serveChannels loop %s", err)
-		} else {
-			s.logger.Info("Exit serveChannels loop")
-		}
+		s.errorsWraps(err, "Error serveChannels loop", "Exit serveChannels loop")
 		cansel()
 	})
 
@@ -139,6 +129,14 @@ func (s *Server) Run() error {
 	}, func(err error) {})
 
 	return g.Run()
+}
+
+func (s *Server) errorsWraps(err error, e, str string) {
+	if err != nil {
+		s.logger.Errorf("%s %s", e, err)
+	} else {
+		s.logger.Info(str)
+	}
 }
 
 func (s *Server) runTCPListener(l net.Listener) error {
@@ -205,20 +203,28 @@ func (s *Server) runServer(ctx context.Context) error {
 		case cc := <-s.raft.confChangeC:
 			confChangeCount++
 			cc.ID = confChangeCount
-			s.raft.node.ProposeConfChange(context.TODO(), cc)
-			//Propose
+			if err := s.raft.node.ProposeConfChange(context.TODO(), cc); err != nil {
+				return err
+			}
+
 		case cmd := <-s.requests:
-			s.logger.Debug("cmd:", cmd.cmd)
-			//blocks до тех пор, пока их не примет машина
-			ctx, cansel := context.WithTimeout(context.Background(), time.Second*2)
-			err := s.raft.node.Propose(ctx, []byte(cmd.cmd.values[0]))
-			if err != nil {
-				s.logger.Error(err)
+
+			switch cmd.cmd.actions {
+			case set:
+				var buf bytes.Buffer
+				if err := gob.NewEncoder(&buf).Encode(cmd.cmd); err != nil {
+					return err
+				}
+
+				ctx, cansel := context.WithTimeout(context.Background(), time.Second*2)
+				err := s.raft.node.Propose(ctx, buf.Bytes())
+				cansel()
+
+				if err := responceWraper(cmd.response, nil, err); err != nil {
+					s.logger.Error(err)
+				}
 			}
-			if err := responceWraper(cmd.response, []byte("OLOLOLO"), nil); err != nil {
-				s.logger.Error(err)
-			}
-			cansel()
+
 			//END RAFT
 
 			// switch cmd.cmd.actions {
@@ -242,13 +248,38 @@ func (s *Server) runServer(ctx context.Context) error {
 			// 	continue
 			// }
 
-		case <-s.raft.commitC:
-
-			s.logger.Debug("Log Recive Data commitC!!")
+		case msg := <-s.raft.commitC:
+			if err := s.receiveCommitMSG(msg); err != nil {
+				return err
+			}
 		case <-ctx.Done():
 			return nil
 		}
 	}
+}
+
+func (s *Server) receiveCommitMSG(msg *string) error {
+
+	return nil
+}
+
+func (s *Server) loadFromSnapshot(msg *string) error {
+	snapshot, err := s.raft.snapshotter.Load()
+	if err == snap.ErrNoSnapshot {
+		return nil
+	}
+	if err != nil {
+		return errors.Wrap(err, "load from snapshot")
+	}
+	s.logger.Infof("loading snapshot at term %d and index %d", snapshot.Metadata.Term, snapshot.Metadata.Index)
+	return s.recoverFromSnapshot(snapshot.Data)
+}
+
+func (s *Server) recoverFromSnapshot(snapshot []byte) error {
+	if err := json.Unmarshal(snapshot, &s.st); err != nil {
+		return err
+	}
+	return nil
 }
 
 //GetSnapshot func
@@ -272,6 +303,7 @@ func (s *Server) createRAFTListener() (*net.TCPListener, error) {
 	if err != nil {
 		return nil, fmt.Errorf("raftexample: Failed parsing URL (%v)", err)
 	}
+
 	ln, err := net.Listen("tcp", url.Host)
 	if err != nil {
 		return nil, err
