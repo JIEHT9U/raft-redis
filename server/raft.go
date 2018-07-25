@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -18,7 +19,6 @@ import (
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/coreos/etcd/wal"
 	"github.com/pkg/errors"
-
 	"go.uber.org/zap"
 )
 
@@ -66,56 +66,6 @@ func (s *Server) entriesToApply(ents []raftpb.Entry) ([]raftpb.Entry, error) {
 	return nents, nil
 }
 
-// publishEntries writes committed log entries to commit channel and returns
-// whether all entries could be published.
-// func (s *Server) publishEntries(ents []raftpb.Entry) bool {
-// 	for i := range ents {
-// 		switch ents[i].Type {
-// 		case raftpb.EntryNormal:
-// 			if len(ents[i].Data) == 0 {
-// 				// ignore empty messages
-// 				break
-// 			}
-// 			str := string(ents[i].Data)
-// 			select {
-// 			case s.raft.commitC <- &str:
-// 			case <-s.raft.stopc:
-// 				return false
-// 			}
-
-// 		case raftpb.EntryConfChange:
-// 			var cc raftpb.ConfChange
-// 			cc.Unmarshal(ents[i].Data)
-// 			s.raft.confState = *s.raft.node.ApplyConfChange(cc)
-// 			switch cc.Type {
-// 			case raftpb.ConfChangeAddNode:
-// 				if len(cc.Context) > 0 {
-// 					s.raft.transport.AddPeer(types.ID(cc.NodeID), []string{string(cc.Context)})
-// 				}
-// 			case raftpb.ConfChangeRemoveNode:
-// 				if cc.NodeID == uint64(s.raft.id) {
-// 					log.Println("I've been removed from the cluster! Shutting down.")
-// 					return false
-// 				}
-// 				s.raft.transport.RemovePeer(types.ID(cc.NodeID))
-// 			}
-// 		}
-
-// 		// after commit, update appliedIndex
-// 		s.raft.appliedIndex = ents[i].Index
-
-// 		// special nil commit to signal replay has finished
-// 		if ents[i].Index == s.raft.lastIndex {
-// 			select {
-// 			case s.raft.commitC <- nil:
-// 			case <-s.raft.stopc:
-// 				return false
-// 			}
-// 		}
-// 	}
-// 	return true
-// }
-
 func creteSnapDirIfNotExist(path string) error {
 	if !fileutil.Exist(path) {
 		if err := os.Mkdir(path, 0750); err != nil {
@@ -127,13 +77,13 @@ func creteSnapDirIfNotExist(path string) error {
 
 //InitRaft init default RAFT param
 func (s *Server) InitRaft() error {
+	var oldwal = wal.Exist(s.raft.waldir)
 	var err error
 
 	//Создаём дерикротию где будут храниться snapshots
 	if err = creteSnapDirIfNotExist(s.raft.snapdir); err != nil {
 		return err
 	}
-
 	raft.SetLogger(raft.Logger(s.logger))
 
 	//Signals when snapshotter is ready
@@ -143,12 +93,13 @@ func (s *Server) InitRaft() error {
 		return err
 	}
 
-	rpeers := make([]raft.Peer, len(s.raft.peers))
-	for i := range rpeers {
-		rpeers[i] = raft.Peer{ID: uint64(i + 1)}
-	}
+	return s.startNode(oldwal)
 
-	c := &raft.Config{
+}
+
+func (s *Server) startNode(walExist bool) error {
+	var rpeers = make([]raft.Peer, len(s.raft.peers))
+	var c = &raft.Config{
 		ID:              uint64(s.raft.id),
 		ElectionTick:    10,
 		HeartbeatTick:   1,
@@ -157,18 +108,30 @@ func (s *Server) InitRaft() error {
 		MaxInflightMsgs: 256,
 	}
 
-	if wal.Exist(s.raft.waldir) {
+	if walExist {
 		s.logger.Debugf("Restart Node waldir %s exist", s.raft.waldir)
 		s.raft.node = raft.RestartNode(c)
-	} else {
-		s.logger.Debug("Start Node waldir %s don't exist", s.raft.waldir)
-
-		if s.raft.join {
-			rpeers = nil
-		}
-		s.raft.node = raft.StartNode(c, rpeers)
+		return nil
 	}
 
+	if len(rpeers) <= 0 {
+		return errors.New("Required minimum one peers")
+	}
+
+	for i := range rpeers {
+		rpeers[i] = raft.Peer{ID: uint64(i + 1)}
+	}
+
+	s.logger.Debugf("Start new node waldir %s don't exist", s.raft.waldir)
+	if s.raft.join {
+		rpeers = nil
+	}
+	s.raft.node = raft.StartNode(c, rpeers)
+
+	return s.initRaftTransport()
+}
+
+func (s *Server) initRaftTransport() error {
 	s.raft.transport = &rafthttp.Transport{
 		Logger:      zap.NewExample(),
 		ID:          types.ID(s.raft.id),
@@ -189,9 +152,7 @@ func (s *Server) InitRaft() error {
 			s.raft.transport.AddPeer(types.ID(i+1), []string{s.raft.peers[i]})
 		}
 	}
-
 	return nil
-
 }
 
 func (s *Server) runRAFTListener(ln *net.TCPListener) error {
@@ -208,6 +169,7 @@ func (s *Server) runRAFTListener(ln *net.TCPListener) error {
 }
 
 func (s *Server) serveChannels(ctx context.Context) error {
+	defer s.logger.Debug("defer serveChannels")
 
 	defer s.raft.wal.Close()
 
@@ -222,7 +184,19 @@ func (s *Server) serveChannels(ctx context.Context) error {
 
 		// store raft entries to wal, then publish over commit channel
 		case rd := <-s.raft.node.Ready():
-			s.raft.wal.Save(rd.HardState, rd.Entries)
+
+			// s.logger.Debug("Log Recive Data s.raft.node.Ready!!")
+
+			PrePrint, err := json.MarshalIndent(rd, "", "  ")
+			if err != nil {
+				return err
+			}
+			s.logger.Debug("rc.node.Ready:", string(PrePrint))
+
+			if err := s.raft.wal.Save(rd.HardState, rd.Entries); err != nil {
+				return err
+			}
+
 			if !raft.IsEmptySnap(rd.Snapshot) {
 				s.saveSnap(rd.Snapshot)
 				s.raft.raftStorage.ApplySnapshot(rd.Snapshot)
@@ -241,7 +215,7 @@ func (s *Server) serveChannels(ctx context.Context) error {
 				return err
 			}
 			s.raft.node.Advance()
-			s.logger.Debug("Log Recive Data !!")
+
 		case <-ctx.Done():
 			return nil
 		}

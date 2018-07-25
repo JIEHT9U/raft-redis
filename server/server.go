@@ -14,6 +14,7 @@ import (
 	"github.com/JIEHT9U/raft-redis/str"
 	"github.com/JIEHT9U/raft-redis/vocabulary"
 	"github.com/coreos/etcd/etcdserver/api/snap"
+	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/oklog/run"
 	"github.com/pkg/errors"
@@ -42,7 +43,7 @@ type resp struct {
 
 //New return new type *Server
 func New(initParam *i.Params, logger *zap.SugaredLogger, shutdown <-chan struct{}) *Server {
-	snapDir := fmt.Sprintf("%s-%d-snap", initParam.RaftDataDir, initParam.NodeID)
+	snapDir := fmt.Sprintf("%s/snap-%d", initParam.RaftDataDir, initParam.NodeID)
 
 	return &Server{
 		listenAddr: initParam.ListenAddr,
@@ -62,10 +63,13 @@ func New(initParam *i.Params, logger *zap.SugaredLogger, shutdown <-chan struct{
 			peers:            strings.Split(initParam.RaftPeers, ","),
 			join:             initParam.RaftJoin,
 			snapdir:          snapDir,
-			waldir:           fmt.Sprintf("%s-%d", initParam.RaftDataDir, initParam.NodeID),
+			waldir:           fmt.Sprintf("%s/wal-%d", initParam.RaftDataDir, initParam.NodeID),
 			snapCount:        defaultSnapshotCount,
 			snapshotterReady: make(chan *snap.Snapshotter, 1),
 			snapshotter:      snap.New(logger, snapDir),
+
+			//Создаем новый raft Storage куда будут загружены данные из снапшота
+			raftStorage: raft.NewMemoryStorage(),
 		},
 	}
 }
@@ -100,20 +104,20 @@ func (s *Server) Run() error {
 	})
 
 	//initRaft
-	raftListener, err := s.createRAFTListener()
-	if err != nil {
-		return errors.Wrap(err, "Error create RAFT Listener")
-	}
-	g.Add(func() error {
-		return s.runRAFTListener(raftListener)
-	}, func(err error) {
-		if err != nil {
-			s.logger.Errorf("Error RAFT Listener %s", err)
-		} else {
-			s.logger.Info("Exit RAFT Listener")
-		}
-		raftListener.Close()
-	})
+	// raftListener, err := s.createRAFTListener()
+	// if err != nil {
+	// 	return errors.Wrap(err, "Error create RAFT Listener")
+	// }
+	// g.Add(func() error {
+	// 	return s.runRAFTListener(raftListener)
+	// }, func(err error) {
+	// 	if err != nil {
+	// 		s.logger.Errorf("Error RAFT Listener %s", err)
+	// 	} else {
+	// 		s.logger.Info("Exit RAFT Listener")
+	// 	}
+	// 	raftListener.Close()
+	// })
 
 	g.Add(func() error {
 		s.logger.Info("Start serveChannels")
@@ -206,15 +210,15 @@ func (s *Server) runServer(ctx context.Context) error {
 		case cmd := <-s.requests:
 			s.logger.Debug("cmd:", cmd.cmd)
 			//blocks до тех пор, пока их не примет машина
-			ctx, _ := context.WithTimeout(context.Background(), time.Second*2)
+			ctx, cansel := context.WithTimeout(context.Background(), time.Second*2)
 			err := s.raft.node.Propose(ctx, []byte(cmd.cmd.values[0]))
 			if err != nil {
 				s.logger.Error(err)
 			}
-
 			if err := responceWraper(cmd.response, []byte("OLOLOLO"), nil); err != nil {
 				s.logger.Error(err)
 			}
+			cansel()
 			//END RAFT
 
 			// switch cmd.cmd.actions {
@@ -239,7 +243,8 @@ func (s *Server) runServer(ctx context.Context) error {
 			// }
 
 		case <-s.raft.commitC:
-			s.logger.Debug("Log Recive Data !!")
+
+			s.logger.Debug("Log Recive Data commitC!!")
 		case <-ctx.Done():
 			return nil
 		}

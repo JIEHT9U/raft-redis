@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/coreos/etcd/wal"
 	"github.com/coreos/etcd/wal/walpb"
@@ -61,9 +60,6 @@ func (s *Server) replayWAL() (*wal.WAL, error) {
 		return nil, fmt.Errorf("raftexample: failed to read WAL (%v)", err)
 	}
 
-	//Создаем новый raft Storage куда будут загружены данные из снапшота
-	s.raft.raftStorage = raft.NewMemoryStorage()
-
 	//Загружаем данные в storage если snapshot не пуст
 	if snapshot != nil {
 		s.raft.raftStorage.ApplySnapshot(*snapshot)
@@ -76,10 +72,6 @@ func (s *Server) replayWAL() (*wal.WAL, error) {
 
 	//добавьте в хранилище, чтобы raft стартовал в нужном месте в журнале
 	s.raft.raftStorage.Append(ents)
-
-	// s.raft.confState = snapshot.Metadata.ConfState
-	// s.raft.snapshotIndex = snapshot.Metadata.Index
-	// s.raft.appliedIndex = snapshot.Metadata.Index
 
 	// send nil once lastIndex is published so client knows commit channel is current
 	// отправить nil после опубликования последнего индекса, так что клиент знает, что канал фиксации текущий
