@@ -188,11 +188,19 @@ func (s *Server) serveChannels(ctx context.Context) error {
 			}
 
 			if !raft.IsEmptySnap(rd.Snapshot) {
-				s.saveSnap(rd.Snapshot)
-				s.raft.raftStorage.ApplySnapshot(rd.Snapshot)
-				s.publishSnapshot(rd.Snapshot)
+				if err := s.saveSnap(rd.Snapshot); err != nil {
+					return err
+				}
+				if err := s.raft.raftStorage.ApplySnapshot(rd.Snapshot); err != nil {
+					return err
+				}
+				if err := s.publishSnapshot(rd.Snapshot); err != nil {
+					return err
+				}
 			}
-			s.raft.raftStorage.Append(rd.Entries)
+			if err := s.raft.raftStorage.Append(rd.Entries); err != nil {
+				return err
+			}
 			s.raft.transport.Send(rd.Messages)
 			nents, err := s.entriesToApply(rd.CommittedEntries)
 			if err != nil {
@@ -216,15 +224,14 @@ func (s *Server) serveChannels(ctx context.Context) error {
 // publishEntries writes committed log entries to commit channel and returns
 // whether all entries could be published.
 func (s *Server) publishEntries(ctx context.Context, ents []raftpb.Entry) error {
-	for i := range ents {
-		switch ents[i].Type {
+	for _, val := range ents {
+		switch val.Type {
 		case raftpb.EntryNormal:
-			if len(ents[i].Data) == 0 {
+			if len(val.Data) == 0 {
 				// ignore empty messages
-				s.logger.Debug("Recive emty MSG")
 				break
 			}
-			srt := string(ents[i].Data)
+			srt := string(val.Data)
 			select {
 			case s.raft.commitC <- &srt:
 			case <-ctx.Done():
@@ -233,7 +240,7 @@ func (s *Server) publishEntries(ctx context.Context, ents []raftpb.Entry) error 
 
 		case raftpb.EntryConfChange:
 			var cc raftpb.ConfChange
-			if err := cc.Unmarshal(ents[i].Data); err != nil {
+			if err := cc.Unmarshal(val.Data); err != nil {
 				return err
 			}
 			s.raft.confState = *s.raft.node.ApplyConfChange(cc)

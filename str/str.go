@@ -3,7 +3,6 @@ package str
 import (
 	"errors"
 	"fmt"
-	"log"
 	"time"
 )
 
@@ -38,7 +37,6 @@ func (s *Store) Set(key, value string, expireTime int64) {
 //Get set value
 func (s *Store) Get(key string) ([]byte, error) {
 	if value, ok := s.data[key]; ok {
-		log.Println("get storage:", ok, value)
 		if value.expires < 0 {
 			return []byte(fmt.Sprintf("%s %d", value.data, -1)), nil
 		}
