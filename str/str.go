@@ -3,11 +3,15 @@ package str
 import (
 	"errors"
 	"fmt"
+	"log"
 	"time"
 )
 
 //ErrTimeExpired err
-var ErrTimeExpired = errors.New("key time expired")
+var (
+	ErrTimeExpired = errors.New("key time expired")
+	ErrKeyNotFound = errors.New("key not found")
+)
 
 //Store type
 type Store struct {
@@ -34,7 +38,7 @@ func (s *Store) Set(key, value string, expireTime int64) {
 //Get set value
 func (s *Store) Get(key string) ([]byte, error) {
 	if value, ok := s.data[key]; ok {
-
+		log.Println("get storage:", ok, value)
 		if value.expires < 0 {
 			return []byte(fmt.Sprintf("%s %d", value.data, -1)), nil
 		}
@@ -42,18 +46,12 @@ func (s *Store) Get(key string) ([]byte, error) {
 		if time.Now().UnixNano() < value.expires {
 			return []byte(fmt.Sprintf("%s %d", value.data, time.Unix(0, value.expires-time.Now().UnixNano()).Second())), nil
 		}
-
 		return nil, ErrTimeExpired
-
 	}
-	return nil, fmt.Errorf("key %s not found", key)
+	return nil, ErrKeyNotFound
 }
 
 //Del set value
 func (s *Store) Del(key string) {
-
-}
-
-func (s *Store) delete(key string) {
 	delete(s.data, key)
 }

@@ -208,14 +208,18 @@ func (s *Server) runServer(ctx context.Context) error {
 
 		case requests := <-s.requests:
 			switch requests.cmd.Actions {
-			case set:
+			case set, del:
 				if err := responceWraper(requests.response, nil, s.proposeCMD(requests.cmd)); err != nil {
 					s.logger.Error(err)
 				}
 			case get:
 				data, err := s.st.stringsStorage.Get(requests.cmd.Key)
 				if err == str.ErrTimeExpired {
-					if err := responceWraper(requests.response, nil, s.proposeCMD(cmd{Key: requests.cmd.Key, Actions: del})); err != nil {
+					var err = s.proposeCMD(cmd{Key: requests.cmd.Key, Actions: del})
+					if err == nil {
+						err = str.ErrKeyNotFound
+					}
+					if err := responceWraper(requests.response, nil, err); err != nil {
 						s.logger.Error(err)
 					}
 					continue
@@ -223,8 +227,6 @@ func (s *Server) runServer(ctx context.Context) error {
 				if err := responceWraper(requests.response, data, err); err != nil {
 					s.logger.Error(err)
 				}
-			case del:
-
 			}
 		case s.getSnap <- s.st:
 		case msg := <-s.raft.commitC:
@@ -263,9 +265,6 @@ func (s *Server) receiveCommitMSG(msg *string) error {
 
 func (s *Server) applyCMD(cmd cmd) error {
 
-	PrePrint, _ := json.MarshalIndent(cmd, "", "  ")
-	s.logger.Debug(string(PrePrint))
-
 	switch cmd.Actions {
 	case set:
 		s.st.stringsStorage.Set(cmd.Key, cmd.Values[0], cmd.Expire)
@@ -291,6 +290,7 @@ func (s *Server) loadFromSnapshot() error {
 }
 
 func (s *Server) getSnapshot() ([]byte, error) {
+	s.logger.Debug("get snapshot")
 	select {
 	case storages := <-s.getSnap:
 		var buf bytes.Buffer
