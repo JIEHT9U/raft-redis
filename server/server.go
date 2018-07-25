@@ -62,18 +62,17 @@ func New(initParam *i.Params, logger *zap.Logger, shutdown <-chan struct{}) *Ser
 		requests: make(chan request, 1),
 		raft: &raftNode{
 			electionTick:     10,
-			heartbeatTick:    2,
+			heartbeatTick:    1,
 			id:               initParam.NodeID,
 			join:             initParam.RaftJoin,
 			confChangeC:      make(chan raftpb.ConfChange),
 			commitC:          make(chan *string, 1),
 			peers:            strings.Split(initParam.RaftPeers, ","),
 			waldir:           fmt.Sprintf("%s/%d/wal", initParam.RaftDataDir, initParam.NodeID),
-			snapCount:        defaultSnapshotCount,
+			snapCount:        10000,
 			snapdir:          snapDir,
 			snapshotterReady: make(chan *snap.Snapshotter, 1),
 			snapshotter:      snap.New(logger, snapDir),
-			// snapshotter:      snap.New(ll.NewZapLoggerRaft(logger), snapDir),
 
 			//Создаем новый raft Storage куда будут загружены данные из снапшота
 			raftStorage: raft.NewMemoryStorage(),
@@ -204,6 +203,10 @@ func (s *Server) runServer(ctx context.Context) error {
 		select {
 
 		case cc := <-s.raft.confChangeC:
+
+			PrePrint, _ := json.MarshalIndent(cc, "", "  ")
+			s.logger.Debug("s.raft.confChangeC:", string(PrePrint))
+
 			confChangeCount++
 			cc.ID = confChangeCount
 			if err := s.raft.node.ProposeConfChange(context.TODO(), cc); err != nil {

@@ -1,0 +1,65 @@
+version: '2.0'
+services:
+  # go-redis-1:
+  #   image: jieht9u/go-redis-raft:0.0.1
+  #   container_name: go-redis-1
+  #   ports:
+  #     - "3000:3000"
+  #     - "12379:12379"
+  #   hostname: go-redis-1
+  #   command: ["--id=1",
+  #     "--initial-cluster=http://go-redis-1:12379",     
+  #     "--listen.addr=0.0.0.0:3000"]
+  #   logging:
+  #     driver: "json-file"
+  #     options:
+  #       max-size: "200k"
+  #       max-file: "10"   
+
+  go-redis-1:
+    image: jieht9u/go-redis-raft:0.0.1
+    container_name: go-redis-1
+    ports:
+      - "3000:3000"
+      - "12379:12379"
+    hostname: go-redis-1
+    command: ["--id=1",
+      "--initial-cluster=http://go-redis-1:12379,http://go-redis-2:22379,http://go-redis-3:32379",     
+      "--listen.addr=0.0.0.0:3000"]
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "10"   
+
+  go-redis-2:
+    image: jieht9u/go-redis-raft:0.0.1
+    container_name: go-redis-2
+    ports:
+      - "3001:3000"
+      - "22379:22379"
+    hostname: go-redis-2
+    command: ["--id=2",
+      "--initial-cluster=http://go-redis-1:12379,http://go-redis-2:22379,http://go-redis-3:32379",     
+      "--listen.addr=0.0.0.0:3000"]
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "10"   
+
+  go-redis-3:
+    image: jieht9u/go-redis-raft:0.0.1
+    container_name: go-redis-3
+    ports:
+      - "3002:3000"
+      - "32379:32379"
+    hostname: go-redis-3
+    command: ["--id=3",
+      "--initial-cluster=http://go-redis-1:12379,http://go-redis-2:22379,http://go-redis-3:32379",     
+      "--listen.addr=0.0.0.0:3000"]
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "10"   

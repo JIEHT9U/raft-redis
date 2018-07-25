@@ -9,8 +9,6 @@ import (
 	"github.com/coreos/etcd/wal/walpb"
 )
 
-var defaultSnapshotCount uint64 = 10000
-
 func (s *Server) saveSnap(snap raftpb.Snapshot) error {
 	// must save the snapshot index to the WAL before saving the
 	// snapshot to maintain the invariant that we only Open the
