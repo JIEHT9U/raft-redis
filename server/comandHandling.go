@@ -44,10 +44,10 @@ func (c command) String() string {
 }
 
 type cmd struct {
-	actions command
-	key     string
-	expire  int64
-	values  []string
+	Actions command
+	Key     string
+	Expire  int64
+	Values  []string
 }
 
 func (s *Server) commandHandling(cmds []string) ([]byte, error) {
@@ -79,34 +79,34 @@ func (s *Server) commandHandling(cmds []string) ([]byte, error) {
 func commandParse(cmds []string) (cmd cmd, err error) {
 	var cmdLen = len(cmds)
 
-	if cmd.actions, err = parseCommandType(cmds[0]); err != nil {
+	if cmd.Actions, err = parseCommandType(cmds[0]); err != nil {
 		return cmd, err
 	}
 
-	switch cmd.actions {
+	switch cmd.Actions {
 	case del, get:
 		if cmdLen != 2 {
 			return cmd, errors.New("Expected 2 arguments")
 		}
-		cmd.key = cmds[1]
+		cmd.Key = cmds[1]
 	default:
-		switch cmd.actions {
+		switch cmd.Actions {
 		case set:
 			if cmdLen != 4 {
 				return cmd, errors.New("Expected 4 arguments")
 			}
-			cmd.values = cmds[3:4]
+			cmd.Values = cmds[3:4]
 		default:
 			if cmdLen < 4 {
 				return cmd, errors.New("Expected at list 4 arguments")
 			}
-			cmd.values = cmds[3:]
+			cmd.Values = cmds[3:]
 		}
 
-		if cmd.expire, err = parseDudation(cmds[2]); err != nil {
+		if cmd.Expire, err = parseDudation(cmds[2]); err != nil {
 			return cmd, e.Wrap(err, "Invalid expiration time value")
 		}
-		cmd.key = cmds[1]
+		cmd.Key = cmds[1]
 	}
 
 	return cmd, nil

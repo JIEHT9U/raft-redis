@@ -1,9 +1,13 @@
 package str
 
 import (
+	"errors"
 	"fmt"
 	"time"
 )
+
+//ErrTimeExpired err
+var ErrTimeExpired = errors.New("key time expired")
 
 //Store type
 type Store struct {
@@ -38,7 +42,9 @@ func (s *Store) Get(key string) ([]byte, error) {
 		if time.Now().UnixNano() < value.expires {
 			return []byte(fmt.Sprintf("%s %d", value.data, time.Unix(0, value.expires-time.Now().UnixNano()).Second())), nil
 		}
-		s.delete(key)
+
+		return nil, ErrTimeExpired
+
 	}
 	return nil, fmt.Errorf("key %s not found", key)
 }

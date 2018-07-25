@@ -196,12 +196,9 @@ func (s *Server) connHandler(conn net.Conn) {
 func (s *Server) runServer(ctx context.Context) error {
 	var confChangeCount uint64
 
-	// defer close(s.requests)  !!!!!!!!!
-
 	for {
 		select {
 
-		// send proposals over raft
 		case cc := <-s.raft.confChangeC:
 			confChangeCount++
 			cc.ID = confChangeCount
@@ -209,21 +206,25 @@ func (s *Server) runServer(ctx context.Context) error {
 				return err
 			}
 
-		case cmd := <-s.requests:
-			switch cmd.cmd.actions {
+		case requests := <-s.requests:
+			switch requests.cmd.Actions {
 			case set:
-				var buf bytes.Buffer
-				if err := gob.NewEncoder(&buf).Encode(cmd.cmd); err != nil {
-					return err
-				}
-
-				ctx, cansel := context.WithTimeout(context.Background(), time.Second*2)
-				err := s.raft.node.Propose(ctx, buf.Bytes())
-				cansel()
-
-				if err := responceWraper(cmd.response, nil, err); err != nil {
+				if err := responceWraper(requests.response, nil, s.proposeCMD(requests.cmd)); err != nil {
 					s.logger.Error(err)
 				}
+			case get:
+				data, err := s.st.stringsStorage.Get(requests.cmd.Key)
+				if err == str.ErrTimeExpired {
+					if err := responceWraper(requests.response, nil, s.proposeCMD(cmd{Key: requests.cmd.Key, Actions: del})); err != nil {
+						s.logger.Error(err)
+					}
+					continue
+				}
+				if err := responceWraper(requests.response, data, err); err != nil {
+					s.logger.Error(err)
+				}
+			case del:
+
 			}
 		case s.getSnap <- s.st:
 		case msg := <-s.raft.commitC:
@@ -234,6 +235,17 @@ func (s *Server) runServer(ctx context.Context) error {
 			return nil
 		}
 	}
+}
+
+func (s *Server) proposeCMD(cmd cmd) error {
+	var buf bytes.Buffer
+	if err := gob.NewEncoder(&buf).Encode(cmd); err != nil {
+		return err
+	}
+
+	ctx, cansel := context.WithTimeout(context.Background(), time.Second*2)
+	defer cansel()
+	return s.raft.node.Propose(ctx, buf.Bytes())
 }
 
 func (s *Server) receiveCommitMSG(msg *string) error {
@@ -251,15 +263,18 @@ func (s *Server) receiveCommitMSG(msg *string) error {
 
 func (s *Server) applyCMD(cmd cmd) error {
 
-	switch cmd.actions {
+	PrePrint, _ := json.MarshalIndent(cmd, "", "  ")
+	s.logger.Debug(string(PrePrint))
+
+	switch cmd.Actions {
 	case set:
-		s.st.stringsStorage.Set(cmd.key, cmd.values[0], cmd.expire)
+		s.st.stringsStorage.Set(cmd.Key, cmd.Values[0], cmd.Expire)
 		return nil
 	case del:
-		s.st.stringsStorage.Del(cmd.key)
+		s.st.stringsStorage.Del(cmd.Key)
 		return nil
 	default:
-		return fmt.Errorf("Undefined cmd %s", cmd.actions)
+		return fmt.Errorf("Undefined cmd %s", cmd.Actions)
 	}
 }
 

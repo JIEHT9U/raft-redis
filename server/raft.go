@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -184,15 +183,6 @@ func (s *Server) serveChannels(ctx context.Context) error {
 
 		// store raft entries to wal, then publish over commit channel
 		case rd := <-s.raft.node.Ready():
-
-			// s.logger.Debug("Log Recive Data s.raft.node.Ready!!")
-
-			PrePrint, err := json.MarshalIndent(rd, "", "  ")
-			if err != nil {
-				return err
-			}
-			s.logger.Debug("rc.node.Ready:", string(PrePrint))
-
 			if err := s.raft.wal.Save(rd.HardState, rd.Entries); err != nil {
 				return err
 			}

@@ -11,7 +11,3 @@ type storages struct {
 	vocabularyStorage map[string]vocabulary.Store
 	stringsStorage    *str.Store
 }
-
-func (s *Server) readCommits() {
-
-}
