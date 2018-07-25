@@ -1,0 +1,7 @@
+.gitignore
+debug
+Dockerfile
+Gopkg.lock
+Gopkg.toml
+.vscode
+README.md

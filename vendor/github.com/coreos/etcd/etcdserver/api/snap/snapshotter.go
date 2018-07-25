@@ -52,11 +52,11 @@ var (
 )
 
 type Snapshotter struct {
-	lg  *zap.SugaredLogger
+	lg  *zap.Logger
 	dir string
 }
 
-func New(lg *zap.SugaredLogger, dir string) *Snapshotter {
+func New(lg *zap.Logger, dir string) *Snapshotter {
 	return &Snapshotter{
 		lg:  lg,
 		dir: dir,
@@ -125,7 +125,7 @@ func (s *Snapshotter) Load() (*raftpb.Snapshot, error) {
 	return snap, nil
 }
 
-func loadSnap(lg *zap.SugaredLogger, dir, name string) (*raftpb.Snapshot, error) {
+func loadSnap(lg *zap.Logger, dir, name string) (*raftpb.Snapshot, error) {
 	fpath := filepath.Join(dir, name)
 	snap, err := Read(lg, fpath)
 	if err != nil {
@@ -149,7 +149,7 @@ func loadSnap(lg *zap.SugaredLogger, dir, name string) (*raftpb.Snapshot, error)
 }
 
 // Read reads the snapshot named by snapname and returns the snapshot.
-func Read(lg *zap.SugaredLogger, snapname string) (*raftpb.Snapshot, error) {
+func Read(lg *zap.Logger, snapname string) (*raftpb.Snapshot, error) {
 	b, err := ioutil.ReadFile(snapname)
 	if err != nil {
 		if lg != nil {
@@ -234,7 +234,7 @@ func (s *Snapshotter) snapNames() ([]string, error) {
 	return snaps, nil
 }
 
-func checkSuffix(lg *zap.SugaredLogger, names []string) []string {
+func checkSuffix(lg *zap.Logger, names []string) []string {
 	snaps := []string{}
 	for i := range names {
 		if strings.HasSuffix(names[i], snapSuffix) {

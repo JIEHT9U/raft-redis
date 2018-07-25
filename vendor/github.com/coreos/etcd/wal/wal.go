@@ -70,7 +70,7 @@ var (
 // A just opened WAL is in read mode, and ready for reading records.
 // The WAL will be ready for appending after reading out all the previous records.
 type WAL struct {
-	lg *zap.SugaredLogger
+	lg *zap.Logger
 
 	dir string // the living directory of the underlay files
 
@@ -94,7 +94,7 @@ type WAL struct {
 
 // Create creates a WAL ready for appending records. The given metadata is
 // recorded at the head of each WAL file, and can be retrieved with ReadAll.
-func Create(lg *zap.SugaredLogger, dirpath string, metadata []byte) (*WAL, error) {
+func Create(lg *zap.Logger, dirpath string, metadata []byte) (*WAL, error) {
 	if Exist(dirpath) {
 		return nil, os.ErrExist
 	}
@@ -281,7 +281,7 @@ func (w *WAL) renameWALUnlock(tmpdirpath string) (*WAL, error) {
 // The returned WAL is ready to read and the first record will be the one after
 // the given snap. The WAL cannot be appended to before reading out all of its
 // previous records.
-func Open(lg *zap.SugaredLogger, dirpath string, snap walpb.Snapshot) (*WAL, error) {
+func Open(lg *zap.Logger, dirpath string, snap walpb.Snapshot) (*WAL, error) {
 	w, err := openAtIndex(lg, dirpath, snap, true)
 	if err != nil {
 		return nil, err
@@ -294,11 +294,11 @@ func Open(lg *zap.SugaredLogger, dirpath string, snap walpb.Snapshot) (*WAL, err
 
 // OpenForRead only opens the wal files for read.
 // Write on a read only wal panics.
-func OpenForRead(lg *zap.SugaredLogger, dirpath string, snap walpb.Snapshot) (*WAL, error) {
+func OpenForRead(lg *zap.Logger, dirpath string, snap walpb.Snapshot) (*WAL, error) {
 	return openAtIndex(lg, dirpath, snap, false)
 }
 
-func openAtIndex(lg *zap.SugaredLogger, dirpath string, snap walpb.Snapshot, write bool) (*WAL, error) {
+func openAtIndex(lg *zap.Logger, dirpath string, snap walpb.Snapshot, write bool) (*WAL, error) {
 	names, err := readWALNames(lg, dirpath)
 	if err != nil {
 		return nil, err

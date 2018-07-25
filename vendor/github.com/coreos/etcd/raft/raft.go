@@ -844,7 +844,7 @@ func (r *raft) Step(m pb.Message) error {
 				r.logger.Panicf("unexpected error getting unapplied entries (%v)", err)
 			}
 			if n := numOfPendingConf(ents); n != 0 && r.raftLog.committed > r.raftLog.applied {
-				r.logger.Warnf("%x cannot campaign at term %d since there are still %d pending configuration changes to apply", r.id, r.Term, n)
+				r.logger.Warningf("%x cannot campaign at term %d since there are still %d pending configuration changes to apply", r.id, r.Term, n)
 				return nil
 			}
 
@@ -915,7 +915,7 @@ func stepLeader(r *raft, m pb.Message) error {
 		return nil
 	case pb.MsgCheckQuorum:
 		if !r.checkQuorumActive() {
-			r.logger.Warnf("%x stepped down to follower since quorum is not active", r.id)
+			r.logger.Warningf("%x stepped down to follower since quorum is not active", r.id)
 			r.becomeFollower(r.Term, None)
 		}
 		return nil

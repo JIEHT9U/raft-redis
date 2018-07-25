@@ -31,8 +31,8 @@ type Logger interface {
 	Info(v ...interface{})
 	Infof(format string, v ...interface{})
 
-	Warn(v ...interface{})
-	Warnf(format string, v ...interface{})
+	Warning(v ...interface{})
+	Warningf(format string, v ...interface{})
 
 	Fatal(v ...interface{})
 	Fatalf(format string, v ...interface{})
@@ -95,11 +95,11 @@ func (l *DefaultLogger) Errorf(format string, v ...interface{}) {
 	l.Output(calldepth, header("ERROR", fmt.Sprintf(format, v...)))
 }
 
-func (l *DefaultLogger) Warn(v ...interface{}) {
+func (l *DefaultLogger) Warning(v ...interface{}) {
 	l.Output(calldepth, header("WARN", fmt.Sprint(v...)))
 }
 
-func (l *DefaultLogger) Warnf(format string, v ...interface{}) {
+func (l *DefaultLogger) Warningf(format string, v ...interface{}) {
 	l.Output(calldepth, header("WARN", fmt.Sprintf(format, v...)))
 }
 

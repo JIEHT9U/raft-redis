@@ -2,6 +2,12 @@
 
 
 [[projects]]
+  name = "github.com/alecthomas/kingpin"
+  packages = ["."]
+  revision = "947dcec5ba9c011838740e680966fd7087a71d0d"
+  version = "v2.2.6"
+
+[[projects]]
   branch = "master"
   name = "github.com/alecthomas/template"
   packages = [
@@ -203,6 +209,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "01607530a000f249b4b4669fde1eea6a238c21aba8a734bc4cc126b4fa2a56bf"
+  inputs-digest = "463a994b8732b879aa2dac246c5ae49c377af900b91518caff17e59a9c8cd54b"
   solver-name = "gps-cdcl"
   solver-version = 1

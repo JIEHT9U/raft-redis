@@ -24,19 +24,34 @@ import (
 // A key-value stream backed by raft
 type raftNode struct {
 	confChangeC <-chan raftpb.ConfChange // proposed cluster config changes
-	commitC     chan *string             // entries committed to log (k,v)
-	errorC      chan<- error             // errors from raft session
+	commitC     chan *string             // entries committed to log
 
-	id        int      // client ID for raft session
-	peers     []string // raft peer URLs
-	join      bool     // node is joining an existing cluster
-	waldir    string   // path to WAL directory
-	snapdir   string   // path to snapshot directory
-	lastIndex uint64   // index of log at start
+	// electionTick - количество вызовов Node.Tick, которые должны проходить между
+	// выборы. То есть, если follower не получает никакого сообщения от
+	// лидер текущего термина до истечения срока действия ElectionTick, он станет
+	// кандидат и начать выборы. Выделение должно быть больше, чем
+	// HeartbeatTick. Мы предлагаем ElectionTick = 10 * HeartbeatTick, чтобы избежать
+	// ненужное переключение лидера.
+	electionTick int
+	// heartbeatTick - количество вызовов Node.Tick, которые должны проходить между
+	// сердцебиение. То есть лидер посылает сообщения о сердцебиении для поддержания своих
+	// лидерство каждый тибетский HeartbeatTick.
+	heartbeatTick int
+	id            int      // client ID for raft session
+	peers         []string // raft peer URLs
+	join          bool     // node is joining an existing cluster
+	waldir        string   // path to WAL directory
+	snapdir       string   // path to snapshot directory
+	lastIndex     uint64   // index of log at start
 
 	confState     raftpb.ConfState
 	snapshotIndex uint64
-	appliedIndex  uint64
+
+	// appliedIndex последний применяемый индекс. Его следует устанавливать только при перезапуске
+	// RAFT. RAFT не будет возвращать записи в приложение, меньшие или равные
+	// appliedIndex. Если appliedIndex не используется при перезапуске, Raft может вернуться назад
+	// применяемые записи. Это очень зависимая от приложения конфигурация.
+	appliedIndex uint64
 
 	// raft backing for the commit/error channel
 	node        raft.Node
@@ -100,8 +115,8 @@ func (s *Server) startNode(walExist bool) error {
 	var rpeers = make([]raft.Peer, len(s.raft.peers))
 	var c = &raft.Config{
 		ID:              uint64(s.raft.id),
-		ElectionTick:    10,
-		HeartbeatTick:   1,
+		ElectionTick:    s.raft.electionTick,
+		HeartbeatTick:   s.raft.heartbeatTick,
 		Storage:         s.raft.raftStorage,
 		MaxSizePerMsg:   1024 * 1024,
 		MaxInflightMsgs: 256,
@@ -198,6 +213,7 @@ func (s *Server) serveChannels(ctx context.Context) error {
 					return err
 				}
 			}
+
 			if err := s.raft.raftStorage.Append(rd.Entries); err != nil {
 				return err
 			}
@@ -259,10 +275,10 @@ func (s *Server) publishEntries(ctx context.Context, ents []raftpb.Entry) error 
 		}
 
 		// after commit, update appliedIndex
-		s.raft.appliedIndex = ents[i].Index
+		s.raft.appliedIndex = val.Index
 
 		// special nil commit to signal replay has finished
-		if ents[i].Index == s.raft.lastIndex {
+		if val.Index == s.raft.lastIndex {
 			select {
 			case s.raft.commitC <- nil:
 			case <-ctx.Done():

@@ -26,7 +26,7 @@ import (
 
 // filePipeline pipelines allocating disk space
 type filePipeline struct {
-	lg *zap.SugaredLogger
+	lg *zap.Logger
 
 	// dir to put files
 	dir string
@@ -40,7 +40,7 @@ type filePipeline struct {
 	donec chan struct{}
 }
 
-func newFilePipeline(lg *zap.SugaredLogger, dir string, fileSize int64) *filePipeline {
+func newFilePipeline(lg *zap.Logger, dir string, fileSize int64) *filePipeline {
 	fp := &filePipeline{
 		lg:    lg,
 		dir:   dir,

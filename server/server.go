@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	ll "github.com/JIEHT9U/raft-redis/logger"
+
 	i "github.com/JIEHT9U/raft-redis/init"
 	"github.com/JIEHT9U/raft-redis/list"
 	"github.com/JIEHT9U/raft-redis/str"
@@ -61,6 +63,8 @@ func New(initParam *i.Params, logger *zap.SugaredLogger, shutdown <-chan struct{
 		},
 		requests: make(chan request, 1),
 		raft: &raftNode{
+			electionTick:     10,
+			heartbeatTick:    2,
 			id:               initParam.NodeID,
 			join:             initParam.RaftJoin,
 			confChangeC:      make(chan raftpb.ConfChange),
@@ -70,7 +74,7 @@ func New(initParam *i.Params, logger *zap.SugaredLogger, shutdown <-chan struct{
 			snapCount:        defaultSnapshotCount,
 			snapdir:          snapDir,
 			snapshotterReady: make(chan *snap.Snapshotter, 1),
-			snapshotter:      snap.New(logger, snapDir),
+			snapshotter:      snap.New(ll.NewZapLoggerRaft(logger), snapDir),
 
 			//Создаем новый raft Storage куда будут загружены данные из снапшота
 			raftStorage: raft.NewMemoryStorage(),

@@ -411,7 +411,7 @@ func (n *node) Tick() {
 	case n.tickc <- struct{}{}:
 	case <-n.done:
 	default:
-		n.logger.Warnf("A tick missed to fire. Node blocks too long!")
+		n.logger.Warningf("A tick missed to fire. Node blocks too long!")
 	}
 }
 
