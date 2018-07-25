@@ -69,7 +69,7 @@ func (s *Server) entriesToApply(ents []raftpb.Entry) ([]raftpb.Entry, error) {
 func creteSnapDirIfNotExist(path string) error {
 	if !fileutil.Exist(path) {
 		if err := os.MkdirAll(path, 0750); err != nil {
-			return fmt.Errorf("raftexample: cannot create dir for snapshot (%v)", err)
+			return fmt.Errorf("cannot create dir for snapshot (%v)", err)
 		}
 	}
 	return nil

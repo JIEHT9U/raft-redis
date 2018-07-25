@@ -30,6 +30,7 @@ type Server struct {
 	logger     *zap.SugaredLogger
 	shutdown   <-chan struct{}
 	requests   chan request
+	getSnap    chan storages
 	raft       *raftNode
 	st         storages
 }
@@ -49,6 +50,7 @@ func New(initParam *i.Params, logger *zap.SugaredLogger, shutdown <-chan struct{
 	snapDir := fmt.Sprintf("%s/%d/snap", initParam.RaftDataDir, initParam.NodeID)
 
 	return &Server{
+		getSnap:    make(chan storages),
 		listenAddr: initParam.ListenAddr,
 		logger:     logger,
 		shutdown:   shutdown,
@@ -208,7 +210,6 @@ func (s *Server) runServer(ctx context.Context) error {
 			}
 
 		case cmd := <-s.requests:
-
 			switch cmd.cmd.actions {
 			case set:
 				var buf bytes.Buffer
@@ -224,30 +225,7 @@ func (s *Server) runServer(ctx context.Context) error {
 					s.logger.Error(err)
 				}
 			}
-
-			//END RAFT
-
-			// switch cmd.cmd.actions {
-			// case set:
-			// 	s.st.stringsStorage.Set(cmd.cmd.key, cmd.cmd.values[0], cmd.cmd.expire)
-			// 	if err := responceWraper(cmd.response, []byte("success"), nil); err != nil {
-			// 		s.logger.Error(err)
-			// 	}
-			// 	continue
-			// case get:
-			// 	data, err := s.st.stringsStorage.Get(cmd.cmd.key)
-			// 	if err := responceWraper(cmd.response, data, err); err != nil {
-			// 		s.logger.Error(err)
-			// 	}
-			// 	continue
-			// case del:
-			// 	s.st.stringsStorage.Del(cmd.cmd.key)
-			// 	if err := responceWraper(cmd.response, []byte("success"), nil); err != nil {
-			// 		s.logger.Error(err)
-			// 	}
-			// 	continue
-			// }
-
+		case s.getSnap <- s.st:
 		case msg := <-s.raft.commitC:
 			if err := s.receiveCommitMSG(msg); err != nil {
 				return err
@@ -259,11 +237,33 @@ func (s *Server) runServer(ctx context.Context) error {
 }
 
 func (s *Server) receiveCommitMSG(msg *string) error {
+	if msg == nil {
+		return s.loadFromSnapshot()
+	}
 
-	return nil
+	var cmd cmd
+	if err := gob.NewDecoder(bytes.NewBufferString(*msg)).Decode(&cmd); err != nil {
+		return fmt.Errorf("could not decode message (%v)", err)
+	}
+
+	return s.applyCMD(cmd)
 }
 
-func (s *Server) loadFromSnapshot(msg *string) error {
+func (s *Server) applyCMD(cmd cmd) error {
+
+	switch cmd.actions {
+	case set:
+		s.st.stringsStorage.Set(cmd.key, cmd.values[0], cmd.expire)
+		return nil
+	case del:
+		s.st.stringsStorage.Del(cmd.key)
+		return nil
+	default:
+		return fmt.Errorf("Undefined cmd %s", cmd.actions)
+	}
+}
+
+func (s *Server) loadFromSnapshot() error {
 	snapshot, err := s.raft.snapshotter.Load()
 	if err == snap.ErrNoSnapshot {
 		return nil
@@ -272,19 +272,20 @@ func (s *Server) loadFromSnapshot(msg *string) error {
 		return errors.Wrap(err, "load from snapshot")
 	}
 	s.logger.Infof("loading snapshot at term %d and index %d", snapshot.Metadata.Term, snapshot.Metadata.Index)
-	return s.recoverFromSnapshot(snapshot.Data)
+	return json.Unmarshal(snapshot.Data, &s.st)
 }
 
-func (s *Server) recoverFromSnapshot(snapshot []byte) error {
-	if err := json.Unmarshal(snapshot, &s.st); err != nil {
-		return err
-	}
-	return nil
-}
-
-//GetSnapshot func
 func (s *Server) getSnapshot() ([]byte, error) {
-	return []byte{}, nil
+	select {
+	case storages := <-s.getSnap:
+		var buf bytes.Buffer
+		if err := gob.NewEncoder(&buf).Encode(storages); err != nil {
+			return nil, err
+		}
+		return buf.Bytes(), nil
+	case <-time.After(time.Second * 1):
+		return nil, errors.New("Error time out getSnapshot")
+	}
 }
 
 func responceWraper(response chan resp, data []byte, err error) error {
@@ -292,7 +293,6 @@ func responceWraper(response chan resp, data []byte, err error) error {
 	case response <- resp{data: data, err: err}:
 		return nil
 	default:
-		close(response)
 		return fmt.Errorf("Error send response MSG [%s]", string(data))
 	}
 }
@@ -301,7 +301,7 @@ func (s *Server) createRAFTListener() (*net.TCPListener, error) {
 
 	url, err := url.Parse(s.raft.peers[s.raft.id-1])
 	if err != nil {
-		return nil, fmt.Errorf("raftexample: Failed parsing URL (%v)", err)
+		return nil, fmt.Errorf("Failed parsing URL (%v)", err)
 	}
 
 	ln, err := net.Listen("tcp", url.Host)

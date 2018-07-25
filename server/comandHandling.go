@@ -25,6 +25,24 @@ const (
 	llen  command = iota
 )
 
+var cmdMapToString = map[command]string{
+	set:   "SET",
+	get:   "GET",
+	del:   "DEL",
+	hmset: "HMSET",
+	hget:  "HGET",
+	rpush: "RPUSH",
+	lpush: "LPUSH",
+	llen:  "LLEN",
+}
+
+func (c command) String() string {
+	if val, ok := cmdMapToString[c]; ok {
+		return val
+	}
+	return "error map cmd to string"
+}
+
 type cmd struct {
 	actions command
 	key     string

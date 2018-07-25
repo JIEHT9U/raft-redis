@@ -33,7 +33,7 @@ func (s *Server) saveSnap(snap raftpb.Snapshot) error {
 func (s *Server) loadSnapshot() (*raftpb.Snapshot, error) {
 	snapshot, err := s.raft.snapshotter.Load()
 	if err != nil && err != snap.ErrNoSnapshot {
-		return nil, fmt.Errorf("raftexample: error loading snapshot (%v)", err)
+		return nil, fmt.Errorf("error loading snapshot (%v)", err)
 	}
 	return snapshot, nil
 }

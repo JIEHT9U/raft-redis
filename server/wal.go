@@ -13,12 +13,12 @@ import (
 func (s *Server) openWAL(snapshot *raftpb.Snapshot) (*wal.WAL, error) {
 	if !wal.Exist(s.raft.waldir) {
 		if err := os.Mkdir(s.raft.waldir, 0750); err != nil {
-			return nil, fmt.Errorf("raftexample: cannot create dir for wal (%v)", err)
+			return nil, fmt.Errorf("cannot create dir for wal (%v)", err)
 		}
 
 		w, err := wal.Create(s.logger, s.raft.waldir, nil)
 		if err != nil {
-			return nil, fmt.Errorf("raftexample: create wal error (%v)", err)
+			return nil, fmt.Errorf("create wal error (%v)", err)
 		}
 		w.Close()
 	}
@@ -31,7 +31,7 @@ func (s *Server) openWAL(snapshot *raftpb.Snapshot) (*wal.WAL, error) {
 
 	w, err := wal.Open(s.logger, s.raft.waldir, walsnap)
 	if err != nil {
-		return nil, fmt.Errorf("raftexample: error loading wal (%v)", err)
+		return nil, fmt.Errorf("error loading wal (%v)", err)
 	}
 
 	return w, nil
@@ -57,7 +57,7 @@ func (s *Server) replayWAL() (*wal.WAL, error) {
 	//читаем данные с диска c помошью WAL
 	_, st, ents, err := w.ReadAll()
 	if err != nil {
-		return nil, fmt.Errorf("raftexample: failed to read WAL (%v)", err)
+		return nil, fmt.Errorf("failed to read WAL (%v)", err)
 	}
 
 	//Загружаем данные в storage если snapshot не пуст
