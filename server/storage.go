@@ -15,8 +15,9 @@ import (
 
 //ErrTimeExpired err
 var (
-	ErrTimeExpired = errors.New("key time expired")
-	ErrKeyNotFound = errors.New("key not found")
+	ErrTimeExpired        = errors.New("key time expired")
+	ErrKeyNotFound        = errors.New("key not found")
+	ErrKeyHaveAnotherType = errors.New("key have another type")
 )
 
 // type storages struct {
@@ -48,6 +49,14 @@ func convertToBytesAndHash(data string) ([]byte, string, error) {
 	return buf.Bytes(), hex.EncodeToString(h.Sum(nil)), nil
 }
 
+func convertToStrong(data []byte) (string, error) {
+	var srt string
+	if err := gob.NewDecoder(bytes.NewReader(data)).Decode(&srt); err != nil {
+		return "", err
+	}
+	return srt, nil
+}
+
 func (st *storages) lpush(key string, value string) error {
 
 	dataBytes, hash, err := convertToBytesAndHash(value)
@@ -56,6 +65,9 @@ func (st *storages) lpush(key string, value string) error {
 	}
 
 	if s, ok := st.data[key]; ok {
+		if s.linkedList == nil {
+			return ErrKeyHaveAnotherType
+		}
 		s.linkedList.AddFirst(hash, dataBytes)
 		return nil
 	}
@@ -63,6 +75,32 @@ func (st *storages) lpush(key string, value string) error {
 	st.data[key] = storage{linkedList: list.Create().AddFirst(hash, dataBytes)}
 
 	return nil
+}
+
+func (st *storages) lget(key string, start, end int) ([]byte, error) {
+
+	if s, ok := st.data[key]; ok {
+
+		if s.linkedList.Count() <= 0 {
+			return nil, errors.New("linked list empty")
+		}
+
+		var buf bytes.Buffer
+
+		for n := range s.linkedList.Next() {
+			str, err := convertToStrong(n.Value)
+			if err != nil {
+				return nil, err
+			}
+			if _, err := buf.WriteString(str + "\n\r"); err != nil {
+				return nil, err
+			}
+		}
+
+		return buf.Bytes(), nil
+	}
+
+	return nil, ErrKeyNotFound
 }
 
 func (st *storages) rpush(key string, value string) error {
@@ -94,6 +132,14 @@ func checkKeyExpire(exp int64) (int, error) {
 
 func (st *storages) set(key, value string, expireTime int64) {
 	st.data[key] = storage{str: value, expired: expireTime}
+}
+
+func (st *storages) expire(key string, expireTime int64) error {
+	if data, ok := st.data[key]; ok {
+		st.data[key] = storage{expired: expireTime, str: data.str}
+		return nil
+	}
+	return ErrKeyNotFound
 }
 
 func (st *storages) get(key string) ([]byte, error) {

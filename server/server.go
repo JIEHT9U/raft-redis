@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -211,7 +212,7 @@ func (s *Server) runServer(ctx context.Context) error {
 
 		case requests := <-s.requests:
 			switch requests.cmd.Actions {
-			case set, del, lpush, rpush:
+			case set, del, lpush, rpush, expire:
 				if err := responceWraper(requests.response, nil, s.proposeCMD(requests.cmd)); err != nil {
 					s.logger.Error(err)
 				}
@@ -228,6 +229,29 @@ func (s *Server) runServer(ctx context.Context) error {
 					continue
 				}
 				if err := responceWraper(requests.response, data, err); err != nil {
+					s.logger.Error(err)
+				}
+			case llen:
+				if data, ok := s.st.data[requests.cmd.Key]; ok {
+					if err := responceWraper(requests.response, []byte("len:"+strconv.FormatInt(data.linkedList.Count(), 64)), nil); err != nil {
+						s.logger.Error(err)
+					}
+				}
+				if err := responceWraper(requests.response, nil, ErrKeyNotFound); err != nil {
+					s.logger.Error(err)
+				}
+			case lget:
+				if data, ok := s.st.data[requests.cmd.Key]; ok {
+					data.linkedList.Next()
+					if err := responceWraper(requests.response, []byte("len:"+strconv.FormatInt(data.linkedList.Count(), 64)), nil); err != nil {
+						s.logger.Error(err)
+					}
+				}
+				if err := responceWraper(requests.response, nil, ErrKeyNotFound); err != nil {
+					s.logger.Error(err)
+				}
+			default:
+				if err := responceWraper(requests.response, nil, fmt.Errorf("Unknown command %s", requests.cmd.Actions)); err != nil {
 					s.logger.Error(err)
 				}
 			}
@@ -279,6 +303,8 @@ func (s *Server) applyCMD(cmd cmd) error {
 		return s.st.lpush(cmd.Key, cmd.Values[0])
 	case rpush:
 		return s.st.rpush(cmd.Key, cmd.Values[0])
+	case expire:
+		return s.st.expire(cmd.Key, cmd.Expire)
 	default:
 		return fmt.Errorf("Undefined cmd %s", cmd.Actions)
 	}

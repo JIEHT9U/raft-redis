@@ -126,7 +126,7 @@ func (s *Server) startNode(walExist bool) error {
 	if walExist {
 		s.logger.Debugf("Restart Node waldir %s exist", s.raft.waldir)
 		s.raft.node = raft.RestartNode(c)
-		return nil
+		return s.initRaftTransport()
 	}
 
 	if len(rpeers) <= 0 {
@@ -184,7 +184,6 @@ func (s *Server) runRAFTListener(ln *net.TCPListener) error {
 }
 
 func (s *Server) serveChannels(ctx context.Context) error {
-	defer s.logger.Debug("defer serveChannels")
 
 	defer s.raft.wal.Close()
 
@@ -260,8 +259,8 @@ func (s *Server) publishEntries(ctx context.Context, ents []raftpb.Entry) error 
 	for _, val := range ents {
 		switch val.Type {
 		case raftpb.EntryNormal:
+			// ignore empty messages
 			if len(val.Data) == 0 {
-				// ignore empty messages
 				break
 			}
 			srt := string(val.Data)
@@ -306,9 +305,16 @@ func (s *Server) publishEntries(ctx context.Context, ents []raftpb.Entry) error 
 	return nil
 }
 
+//Process func
 func (s *Server) Process(ctx context.Context, m raftpb.Message) error {
 	return s.raft.node.Step(ctx, m)
 }
-func (s *Server) IsIDRemoved(id uint64) bool                           { return false }
-func (s *Server) ReportUnreachable(id uint64)                          {}
+
+//IsIDRemoved func
+func (s *Server) IsIDRemoved(id uint64) bool { return false }
+
+//ReportUnreachable func
+func (s *Server) ReportUnreachable(id uint64) {}
+
+//ReportSnapshot func
 func (s *Server) ReportSnapshot(id uint64, status raft.SnapshotStatus) {}

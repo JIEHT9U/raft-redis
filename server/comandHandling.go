@@ -15,25 +15,29 @@ import (
 type command uint
 
 const (
-	set   command = iota
-	get   command = iota
-	del   command = iota
-	hmset command = iota
-	hget  command = iota
-	llen  command = iota
-	rpush command = iota
-	lpush command = iota
+	set    command = iota
+	get    command = iota
+	del    command = iota
+	hmset  command = iota
+	hget   command = iota
+	llen   command = iota
+	lget   command = iota
+	rpush  command = iota
+	lpush  command = iota
+	expire command = iota
 )
 
 var cmdMapToString = map[command]string{
-	set:   "SET",
-	get:   "GET",
-	del:   "DEL",
-	hmset: "HMSET",
-	hget:  "HGET",
-	llen:  "LLEN",
-	rpush: "RPUSH",
-	lpush: "LPUSH",
+	set:    "SET",
+	get:    "GET",
+	del:    "DEL",
+	hmset:  "HMSET",
+	hget:   "HGET",
+	llen:   "LLEN",
+	lget:   "LGET",
+	rpush:  "RPUSH",
+	lpush:  "LPUSH",
+	expire: "EXPIRE",
 }
 
 func (c command) String() string {
@@ -84,18 +88,35 @@ func commandParse(cmds []string) (cmd cmd, err error) {
 	}
 
 	switch cmd.Actions {
-	case del, get:
+	case del, get, llen, lget:
 		if cmdLen != 2 {
 			return cmd, errors.New("Expected 2 arguments")
 		}
 		cmd.Key = cmds[1]
 	default:
 		switch cmd.Actions {
-		case set, lpush, rpush:
+		case set:
 			if cmdLen != 4 {
 				return cmd, errors.New("Expected 4 arguments")
 			}
 			cmd.Values = cmds[3:4]
+
+		case lpush, rpush:
+			if cmdLen != 3 {
+				return cmd, errors.New("Expected 3 arguments")
+			}
+			cmd.Key = cmds[1]
+			cmd.Values = cmds[2:3]
+			return cmd, nil
+		case expire:
+			if cmdLen != 3 {
+				return cmd, errors.New("Expected 3 arguments")
+			}
+			cmd.Key = cmds[1]
+			if cmd.Expire, err = parseDudation(cmds[2]); err != nil {
+				return cmd, e.Wrap(err, "Invalid expiration time value")
+			}
+			return cmd, nil
 		default:
 			if cmdLen < 4 {
 				return cmd, errors.New("Expected at list 4 arguments")
@@ -127,12 +148,15 @@ func parseCommandType(cmd string) (command, error) {
 		return hmset, nil
 	case "hget":
 		return hget, nil
+	// LinkedList storage
 	case "rpush":
 		return rpush, nil
 	case "lpush":
 		return lpush, nil
 	case "llen":
 		return llen, nil
+	case "expire":
+		return expire, nil
 	default:
 		return 0, fmt.Errorf("Unknown command %s", cmd)
 	}

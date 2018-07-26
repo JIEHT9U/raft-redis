@@ -13,7 +13,7 @@ type LinkedList struct {
 
 //Node type
 type Node struct {
-	value      []byte
+	Value      []byte
 	hash       string
 	prev, next *Node
 }
@@ -50,7 +50,7 @@ func (l *LinkedList) Previous() chan *Node {
 func (l *LinkedList) CopyTo(slice map[int64]interface{}, index int64) map[int64]interface{} {
 
 	for n := range l.Next() {
-		slice[index] = n.value
+		slice[index] = n.Value
 		index++
 	}
 	return slice
@@ -142,7 +142,7 @@ func (l *LinkedList) Clear() {
 
 //AddLast func
 func (l *LinkedList) AddLast(hash string, value []byte) *LinkedList {
-	newNode := &Node{value: value, hash: hash}
+	newNode := &Node{Value: value, hash: hash}
 	if l.head == nil {
 		l.head = newNode
 	} else {
@@ -156,7 +156,7 @@ func (l *LinkedList) AddLast(hash string, value []byte) *LinkedList {
 
 //AddFirst func
 func (l *LinkedList) AddFirst(hash string, value []byte) *LinkedList {
-	newNode := &Node{value: value, hash: hash}
+	newNode := &Node{Value: value, hash: hash}
 	if l.head == nil {
 		l.tail = newNode
 	} else {
