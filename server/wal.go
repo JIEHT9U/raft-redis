@@ -69,10 +69,15 @@ func (s *Server) replayWAL() (*wal.WAL, error) {
 		s.raft.snapshotIndex = snapshot.Metadata.Index
 		s.raft.appliedIndex = snapshot.Metadata.Index
 	}
-	s.raft.raftStorage.SetHardState(st)
+
+	if err := s.raft.raftStorage.SetHardState(st); err != nil {
+		return nil, err
+	}
 
 	//добавьте в хранилище, чтобы raft стартовал в нужном месте в журнале
-	s.raft.raftStorage.Append(ents)
+	if err := s.raft.raftStorage.Append(ents); err != nil {
+		return nil, err
+	}
 
 	// send nil once lastIndex is published so client knows commit channel is current
 	// отправить nil после опубликования последнего индекса, так что клиент знает, что канал фиксации текущий

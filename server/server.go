@@ -13,9 +13,6 @@ import (
 	"time"
 
 	i "github.com/JIEHT9U/raft-redis/init"
-	"github.com/JIEHT9U/raft-redis/list"
-	"github.com/JIEHT9U/raft-redis/str"
-	"github.com/JIEHT9U/raft-redis/vocabulary"
 	"github.com/coreos/etcd/etcdserver/api/snap"
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
@@ -55,10 +52,9 @@ func New(initParam *i.Params, logger *zap.Logger, shutdown <-chan struct{}) *Ser
 		logger:     logger.Sugar(),
 		shutdown:   shutdown,
 		st: storages{
-			listStorage:       make(map[string]list.Store),
-			vocabularyStorage: make(map[string]vocabulary.Store),
-			stringsStorage:    str.New(),
+			data: make(map[string]storage),
 		},
+
 		requests: make(chan request, 1),
 		raft: &raftNode{
 			electionTick:     10,
@@ -215,16 +211,16 @@ func (s *Server) runServer(ctx context.Context) error {
 
 		case requests := <-s.requests:
 			switch requests.cmd.Actions {
-			case set, del:
+			case set, del, lpush, rpush:
 				if err := responceWraper(requests.response, nil, s.proposeCMD(requests.cmd)); err != nil {
 					s.logger.Error(err)
 				}
 			case get:
-				data, err := s.st.stringsStorage.Get(requests.cmd.Key)
-				if err == str.ErrTimeExpired {
+				data, err := s.st.get(requests.cmd.Key)
+				if err == ErrTimeExpired {
 					var err = s.proposeCMD(cmd{Key: requests.cmd.Key, Actions: del})
 					if err == nil {
-						err = str.ErrKeyNotFound
+						err = ErrKeyNotFound
 					}
 					if err := responceWraper(requests.response, nil, err); err != nil {
 						s.logger.Error(err)
@@ -274,11 +270,15 @@ func (s *Server) applyCMD(cmd cmd) error {
 
 	switch cmd.Actions {
 	case set:
-		s.st.stringsStorage.Set(cmd.Key, cmd.Values[0], cmd.Expire)
+		s.st.set(cmd.Key, cmd.Values[0], cmd.Expire)
 		return nil
 	case del:
-		s.st.stringsStorage.Del(cmd.Key)
+		s.st.del(cmd.Key)
 		return nil
+	case lpush:
+		return s.st.lpush(cmd.Key, cmd.Values[0])
+	case rpush:
+		return s.st.rpush(cmd.Key, cmd.Values[0])
 	default:
 		return fmt.Errorf("Undefined cmd %s", cmd.Actions)
 	}

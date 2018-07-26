@@ -2,6 +2,8 @@ DOCKER_IMAGE     := jieht9u/go-redis-raft
 DOCKERFILE_LOCAL := Dockerfile
 
 GITVERSION		 := 0.0.1
+DATE             := $(shell date -u '+%Y-%m-%d-%H:%M UTC')
+LDFLAGS    		 := '-X "main.Version=$(GITVERSION)" -X "main.BuildTime=$(DATE)"'
 
 
 .PHONY: docker
@@ -11,7 +13,7 @@ docker: docker-build docker-push
 .PHONY: docker-build
 docker-build:
 	@echo "Docker Build..."
-	$Q docker build -t $(DOCKER_IMAGE):$(GITVERSION) --file=$(DOCKERFILE_LOCAL) .
+	$Q docker build -t $(DOCKER_IMAGE):$(GITVERSION) --build-arg LDFLAGS=$(LDFLAGS) --file=$(DOCKERFILE_LOCAL) .
 
 .PHONY: docker-push
 docker-push:

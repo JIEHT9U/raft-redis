@@ -20,9 +20,9 @@ const (
 	del   command = iota
 	hmset command = iota
 	hget  command = iota
+	llen  command = iota
 	rpush command = iota
 	lpush command = iota
-	llen  command = iota
 )
 
 var cmdMapToString = map[command]string{
@@ -31,9 +31,9 @@ var cmdMapToString = map[command]string{
 	del:   "DEL",
 	hmset: "HMSET",
 	hget:  "HGET",
+	llen:  "LLEN",
 	rpush: "RPUSH",
 	lpush: "LPUSH",
-	llen:  "LLEN",
 }
 
 func (c command) String() string {
@@ -91,7 +91,7 @@ func commandParse(cmds []string) (cmd cmd, err error) {
 		cmd.Key = cmds[1]
 	default:
 		switch cmd.Actions {
-		case set:
+		case set, lpush, rpush:
 			if cmdLen != 4 {
 				return cmd, errors.New("Expected 4 arguments")
 			}

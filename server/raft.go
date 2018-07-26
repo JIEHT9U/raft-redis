@@ -67,8 +67,8 @@ type raftNode struct {
 }
 
 func (s *Server) entriesToApply(ents []raftpb.Entry) ([]raftpb.Entry, error) {
-	var nents = []raftpb.Entry{}
-	if len(ents) == 0 {
+	var nents = make([]raftpb.Entry, 0)
+	if len(ents) <= 0 {
 		return nents, nil
 	}
 	firstIdx := ents[0].Index
@@ -110,7 +110,6 @@ func (s *Server) InitRaft() error {
 	}
 
 	return s.startNode(oldwal)
-
 }
 
 func (s *Server) startNode(walExist bool) error {
@@ -204,10 +203,13 @@ func (s *Server) serveChannels(ctx context.Context) error {
 				return err
 			}
 
+			//Если приепришел  не пустой
 			if !raft.IsEmptySnap(rd.Snapshot) {
+				//Сохраняем Snapshot на диск
 				if err := s.saveSnap(rd.Snapshot); err != nil {
 					return err
 				}
+				//Применяем Snapshot к Storage
 				if err := s.raft.raftStorage.ApplySnapshot(rd.Snapshot); err != nil {
 					return err
 				}
@@ -216,6 +218,7 @@ func (s *Server) serveChannels(ctx context.Context) error {
 				}
 			}
 
+			//Вросим запиши в Raft Storage
 			if err := s.raft.raftStorage.Append(rd.Entries); err != nil {
 				return err
 			}
@@ -230,7 +233,19 @@ func (s *Server) serveChannels(ctx context.Context) error {
 			if err := s.maybeTriggerSnapshot(); err != nil {
 				return err
 			}
+			// Advance уведомляет Node, что приложение сохраняет прогресс до последней готовности.
+			// Он подготавливает Node к возврату следующей доступной Ready.
+			//
+			// Обычно приложение должно вызывать Advance после применения записей в последней Ready.
+			//
+			// Тем не менее, в качестве оптимизации приложение может называть Advance, когда оно применяет
+			// команды. Например. когда последняя Ready содержит моментальный снимок, приложение может принимать
+			// долгое время применять данные моментальных снимков. Для продолжения приема Ready без блокировки плота
+			// progress, он может вызвать Advance перед тем, как закончить применение последней готовой.
 			s.raft.node.Advance()
+
+		case err := <-s.raft.transport.ErrorC:
+			return err
 
 		case <-ctx.Done():
 			return nil
