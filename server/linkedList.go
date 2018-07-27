@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"log"
 	"strconv"
 
 	"github.com/JIEHT9U/raft-redis/list"
@@ -21,7 +22,17 @@ func (st *storages) getLinkedList(key string) (*list.LinkedList, error) {
 	return nil, ErrKeyNotFound
 }
 
-func (st *storages) lget(key string, start, end int) ([]byte, error) {
+func (st *storages) lget(key string, start, end string) ([]byte, error) {
+
+	startInt, err := strconv.Atoi(start)
+	if err != nil {
+		return nil, err
+	}
+
+	endInt, err := strconv.Atoi(end)
+	if err != nil {
+		return nil, err
+	}
 
 	ll, err := st.getLinkedList(key)
 	if err != nil {
@@ -33,18 +44,35 @@ func (st *storages) lget(key string, start, end int) ([]byte, error) {
 	}
 
 	var buf bytes.Buffer
-
-	for n := range ll.Next() {
-		str, err := convertToStrong(n.Value)
-		if err != nil {
-			return nil, err
-		}
-		if _, err := buf.WriteString(str + "\n\r"); err != nil {
-			return nil, err
-		}
+	var starPositions int
+	if _, err := buf.WriteString("\n\r"); err != nil {
+		return nil, err
 	}
+	for n := range ll.Next() {
+		log.Println("starPositions:", starPositions)
+		log.Printf("%#v", startInt >= starPositions)
+		log.Printf("%#v", chechEndPos(starPositions, endInt))
 
+		if startInt >= starPositions && chechEndPos(starPositions, endInt) {
+			log.Println("starPositions_2:", starPositions)
+			str, err := convertToStrong(n.Value)
+			if err != nil {
+				return nil, err
+			}
+			if _, err := buf.WriteString(str + "\n\r"); err != nil {
+				return nil, err
+			}
+		}
+		starPositions++
+	}
 	return buf.Bytes(), nil
+}
+
+func chechEndPos(starPositions, end int) bool {
+	if end < 0 {
+		return true
+	}
+	return starPositions <= end
 }
 
 func (st *storages) llen(key string) ([]byte, error) {
@@ -69,7 +97,7 @@ func (st *storages) rpush(key string, value string) error {
 		s.linkedList.AddLast(hash, dataBytes)
 		return nil
 	}
-	st.data[key] = storage{linkedList: list.Create().AddLast(hash, dataBytes)}
+	st.data[key] = storage{linkedList: list.Create().AddLast(hash, dataBytes), expired: -1}
 	return nil
 }
 
@@ -88,6 +116,7 @@ func (st *storages) lpush(key string, value string) error {
 		return nil
 	}
 
-	st.data[key] = storage{linkedList: list.Create().AddFirst(hash, dataBytes)}
+	st.data[key] = storage{linkedList: list.Create().AddFirst(hash, dataBytes), expired: -1}
+
 	return nil
 }

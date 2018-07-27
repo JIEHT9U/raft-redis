@@ -165,6 +165,7 @@ func (l *LinkedList) AddFirst(hash string, value []byte) *LinkedList {
 		tmp.prev = newNode
 	}
 	l.head = newNode
+	l.length++
 	return l
 }
 

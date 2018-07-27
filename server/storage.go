@@ -90,6 +90,9 @@ func (st *storages) get(key string) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
+		if value.str == "" {
+			return nil, ErrKeyHaveAnotherType
+		}
 		return []byte(fmt.Sprintf("%s %d", value.str, lastExp)), nil
 	}
 	return nil, ErrKeyNotFound

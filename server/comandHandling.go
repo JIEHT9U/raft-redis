@@ -88,7 +88,7 @@ func commandParse(cmds []string) (cmd cmd, err error) {
 	}
 
 	switch cmd.Actions {
-	case del, get, llen, lget:
+	case del, get, llen:
 		if cmdLen != 2 {
 			return cmd, errors.New("Expected 2 arguments")
 		}
@@ -116,6 +116,13 @@ func commandParse(cmds []string) (cmd cmd, err error) {
 			if cmd.Expire, err = parseDudation(cmds[2]); err != nil {
 				return cmd, e.Wrap(err, "Invalid expiration time value")
 			}
+			return cmd, nil
+		case lget:
+			if cmdLen != 4 {
+				return cmd, errors.New("Expected 4 arguments")
+			}
+			cmd.Key = cmds[1]
+			cmd.Values = cmds[2:4]
 			return cmd, nil
 		default:
 			if cmdLen < 4 {
@@ -155,6 +162,8 @@ func parseCommandType(cmd string) (command, error) {
 		return lpush, nil
 	case "llen":
 		return llen, nil
+	case "lget":
+		return lget, nil
 	case "expire":
 		return expire, nil
 	default:

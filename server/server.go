@@ -222,6 +222,7 @@ func (s *Server) runServer(ctx context.Context) error {
 						continue
 					}
 				}
+
 				if err := responceWraper(requests.response, nil, s.proposeCMD(requests.cmd)); err != nil {
 					s.logger.Error(err)
 				}
@@ -240,7 +241,7 @@ func (s *Server) runServer(ctx context.Context) error {
 					s.logger.Error(err)
 				}
 			case lget:
-				data, err := s.st.lget(requests.cmd.Key, -1, -1)
+				data, err := s.st.lget(requests.cmd.Key, requests.cmd.Values[0], requests.cmd.Values[1])
 				if err := responceWraper(requests.response, data, s.initRemoveProcess(requests.cmd.Key, err)); err != nil {
 					s.logger.Error(err)
 				}
