@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"net"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 
@@ -212,42 +211,37 @@ func (s *Server) runServer(ctx context.Context) error {
 
 		case requests := <-s.requests:
 			switch requests.cmd.Actions {
-			case set, del, lpush, rpush, expire:
+			case lpush, rpush:
+				if _, err := s.st.getLinkedList(requests.cmd.Key); err != nil {
+					if err == ErrKeyHaveAnotherType {
+						if err := responceWraper(requests.response, nil, err); err != nil {
+							s.logger.Error(err)
+							continue
+						}
+						s.logger.Error(err)
+						continue
+					}
+				}
+				if err := responceWraper(requests.response, nil, s.proposeCMD(requests.cmd)); err != nil {
+					s.logger.Error(err)
+				}
+			case set, del, expire:
 				if err := responceWraper(requests.response, nil, s.proposeCMD(requests.cmd)); err != nil {
 					s.logger.Error(err)
 				}
 			case get:
 				data, err := s.st.get(requests.cmd.Key)
-				if err == ErrTimeExpired {
-					var err = s.proposeCMD(cmd{Key: requests.cmd.Key, Actions: del})
-					if err == nil {
-						err = ErrKeyNotFound
-					}
-					if err := responceWraper(requests.response, nil, err); err != nil {
-						s.logger.Error(err)
-					}
-					continue
-				}
-				if err := responceWraper(requests.response, data, err); err != nil {
+				if err := responceWraper(requests.response, data, s.initRemoveProcess(requests.cmd.Key, err)); err != nil {
 					s.logger.Error(err)
 				}
 			case llen:
-				if data, ok := s.st.data[requests.cmd.Key]; ok {
-					if err := responceWraper(requests.response, []byte("len:"+strconv.FormatInt(data.linkedList.Count(), 64)), nil); err != nil {
-						s.logger.Error(err)
-					}
-				}
-				if err := responceWraper(requests.response, nil, ErrKeyNotFound); err != nil {
+				data, err := s.st.llen(requests.cmd.Key)
+				if err := responceWraper(requests.response, data, s.initRemoveProcess(requests.cmd.Key, err)); err != nil {
 					s.logger.Error(err)
 				}
 			case lget:
-				if data, ok := s.st.data[requests.cmd.Key]; ok {
-					data.linkedList.Next()
-					if err := responceWraper(requests.response, []byte("len:"+strconv.FormatInt(data.linkedList.Count(), 64)), nil); err != nil {
-						s.logger.Error(err)
-					}
-				}
-				if err := responceWraper(requests.response, nil, ErrKeyNotFound); err != nil {
+				data, err := s.st.lget(requests.cmd.Key, -1, -1)
+				if err := responceWraper(requests.response, data, s.initRemoveProcess(requests.cmd.Key, err)); err != nil {
 					s.logger.Error(err)
 				}
 			default:
@@ -258,12 +252,21 @@ func (s *Server) runServer(ctx context.Context) error {
 		case s.getSnap <- s.st:
 		case msg := <-s.raft.commitC:
 			if err := s.receiveCommitMSG(msg); err != nil {
-				return err
+				s.logger.Error(err)
 			}
 		case <-ctx.Done():
 			return nil
 		}
 	}
+}
+
+func (s *Server) initRemoveProcess(key string, err error) error {
+	if err == ErrTimeExpired {
+		if err := s.proposeCMD(cmd{Key: key, Actions: del}); err != nil {
+			return err
+		}
+	}
+	return err
 }
 
 func (s *Server) proposeCMD(cmd cmd) error {

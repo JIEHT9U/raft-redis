@@ -57,69 +57,6 @@ func convertToStrong(data []byte) (string, error) {
 	return srt, nil
 }
 
-func (st *storages) lpush(key string, value string) error {
-
-	dataBytes, hash, err := convertToBytesAndHash(value)
-	if err != nil {
-		return err
-	}
-
-	if s, ok := st.data[key]; ok {
-		if s.linkedList == nil {
-			return ErrKeyHaveAnotherType
-		}
-		s.linkedList.AddFirst(hash, dataBytes)
-		return nil
-	}
-
-	st.data[key] = storage{linkedList: list.Create().AddFirst(hash, dataBytes)}
-
-	return nil
-}
-
-func (st *storages) lget(key string, start, end int) ([]byte, error) {
-
-	if s, ok := st.data[key]; ok {
-
-		if s.linkedList.Count() <= 0 {
-			return nil, errors.New("linked list empty")
-		}
-
-		var buf bytes.Buffer
-
-		for n := range s.linkedList.Next() {
-			str, err := convertToStrong(n.Value)
-			if err != nil {
-				return nil, err
-			}
-			if _, err := buf.WriteString(str + "\n\r"); err != nil {
-				return nil, err
-			}
-		}
-
-		return buf.Bytes(), nil
-	}
-
-	return nil, ErrKeyNotFound
-}
-
-func (st *storages) rpush(key string, value string) error {
-
-	dataBytes, hash, err := convertToBytesAndHash(value)
-	if err != nil {
-		return err
-	}
-
-	if s, ok := st.data[key]; ok {
-		s.linkedList.AddLast(hash, dataBytes)
-		return nil
-	}
-
-	st.data[key] = storage{linkedList: list.Create().AddLast(hash, dataBytes)}
-
-	return nil
-}
-
 func checkKeyExpire(exp int64) (int, error) {
 	if exp < 0 {
 		return -1, nil
@@ -136,16 +73,19 @@ func (st *storages) set(key, value string, expireTime int64) {
 
 func (st *storages) expire(key string, expireTime int64) error {
 	if data, ok := st.data[key]; ok {
-		st.data[key] = storage{expired: expireTime, str: data.str}
+		st.data[key] = storage{
+			expired:    expireTime,
+			str:        data.str,
+			linkedList: data.linkedList,
+			vocabulary: data.vocabulary,
+		}
 		return nil
 	}
 	return ErrKeyNotFound
 }
 
 func (st *storages) get(key string) ([]byte, error) {
-
 	if value, ok := st.data[key]; ok {
-
 		lastExp, err := checkKeyExpire(value.expired)
 		if err != nil {
 			return nil, err
