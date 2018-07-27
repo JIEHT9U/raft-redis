@@ -98,6 +98,17 @@ func (st *storages) get(key string) ([]byte, error) {
 	return nil, ErrKeyNotFound
 }
 
+func (st *storages) ttl(key string) ([]byte, error) {
+	if value, ok := st.data[key]; ok {
+		lastExp, err := checkKeyExpire(value.expired)
+		if err != nil {
+			return nil, err
+		}
+		return []byte(fmt.Sprintf("TTL %d", lastExp)), nil
+	}
+	return nil, ErrKeyNotFound
+}
+
 func (st *storages) del(key string) {
 	delete(st.data, key)
 }

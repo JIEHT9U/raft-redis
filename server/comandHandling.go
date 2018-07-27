@@ -25,6 +25,7 @@ const (
 	rpush  command = iota
 	lpush  command = iota
 	expire command = iota
+	ttl    command = iota
 )
 
 var cmdMapToString = map[command]string{
@@ -38,6 +39,7 @@ var cmdMapToString = map[command]string{
 	rpush:  "RPUSH",
 	lpush:  "LPUSH",
 	expire: "EXPIRE",
+	ttl:    "TTL",
 }
 
 func (c command) String() string {
@@ -88,7 +90,7 @@ func commandParse(cmds []string) (cmd cmd, err error) {
 	}
 
 	switch cmd.Actions {
-	case del, get, llen:
+	case del, get, llen, ttl:
 		if cmdLen != 2 {
 			return cmd, errors.New("Expected 2 arguments")
 		}
@@ -166,6 +168,8 @@ func parseCommandType(cmd string) (command, error) {
 		return lget, nil
 	case "expire":
 		return expire, nil
+	case "ttl":
+		return ttl, nil
 	default:
 		return 0, fmt.Errorf("Unknown command %s", cmd)
 	}

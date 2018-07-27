@@ -230,6 +230,11 @@ func (s *Server) runServer(ctx context.Context) error {
 				if err := responceWraper(requests.response, nil, s.proposeCMD(requests.cmd)); err != nil {
 					s.logger.Error(err)
 				}
+			case ttl:
+				data, err := s.st.ttl(requests.cmd.Key)
+				if err := responceWraper(requests.response, data, s.initRemoveProcess(requests.cmd.Key, err)); err != nil {
+					s.logger.Error(err)
+				}
 			case get:
 				data, err := s.st.get(requests.cmd.Key)
 				if err := responceWraper(requests.response, data, s.initRemoveProcess(requests.cmd.Key, err)); err != nil {

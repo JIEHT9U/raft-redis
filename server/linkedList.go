@@ -2,7 +2,6 @@ package server
 
 import (
 	"bytes"
-	"log"
 	"strconv"
 
 	"github.com/JIEHT9U/raft-redis/list"
@@ -49,12 +48,7 @@ func (st *storages) lget(key string, start, end string) ([]byte, error) {
 		return nil, err
 	}
 	for n := range ll.Next() {
-		log.Println("starPositions:", starPositions)
-		log.Printf("%#v", startInt >= starPositions)
-		log.Printf("%#v", chechEndPos(starPositions, endInt))
-
-		if startInt >= starPositions && chechEndPos(starPositions, endInt) {
-			log.Println("starPositions_2:", starPositions)
+		if starPositions >= startInt && chechEndPos(starPositions, endInt) {
 			str, err := convertToStrong(n.Value)
 			if err != nil {
 				return nil, err
@@ -89,7 +83,6 @@ func (st *storages) rpush(key string, value string) error {
 	if err != nil {
 		return err
 	}
-
 	if s, ok := st.data[key]; ok {
 		if s.linkedList == nil {
 			return ErrKeyHaveAnotherType
@@ -117,6 +110,5 @@ func (st *storages) lpush(key string, value string) error {
 	}
 
 	st.data[key] = storage{linkedList: list.Create().AddFirst(hash, dataBytes), expired: -1}
-
 	return nil
 }
