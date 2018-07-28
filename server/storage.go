@@ -57,14 +57,14 @@ func convertToStrong(data []byte) (string, error) {
 	return srt, nil
 }
 
-func checkKeyExpire(exp int64) (int, error) {
+func checkKeyExpire(current time.Time, exp int64) (string, error) {
 	if exp < 0 {
-		return -1, nil
+		return "infinity", nil
 	}
-	if time.Now().UnixNano() < exp {
-		return time.Unix(0, exp-time.Now().UnixNano()).Second(), nil
+	if time.Unix(0, exp).After(current) {
+		return time.Unix(0, exp).Sub(current).String(), nil
 	}
-	return 0, ErrTimeExpired
+	return "", ErrTimeExpired
 }
 
 func (st *storages) expire(key string, expireTime int64) error {
@@ -82,11 +82,11 @@ func (st *storages) expire(key string, expireTime int64) error {
 
 func (st *storages) ttl(key string) ([]byte, error) {
 	if value, ok := st.data[key]; ok {
-		lastExp, err := checkKeyExpire(value.expired)
+		lastExp, err := checkKeyExpire(time.Now(), value.expired)
 		if err != nil {
 			return nil, err
 		}
-		return []byte(fmt.Sprintf("TTL %d", lastExp)), nil
+		return []byte(fmt.Sprintf("TTL %s", lastExp)), nil
 	}
 	return nil, ErrKeyNotFound
 }

@@ -92,56 +92,38 @@ func commandParse(cmds []string) (cmd cmd, err error) {
 	}
 
 	switch cmd.Actions {
-	case del, get, llen, ttl:
+	case expire:
+		if cmdLen != 3 {
+			return cmd, errors.New("Expected 3 arguments")
+		}
+		cmd.Key = cmds[1]
+		if cmd.Expire, err = parseDudation(cmds[2]); err != nil {
+			return cmd, e.Wrap(err, "Invalid expiration time value")
+		}
+		return cmd, nil
+	case del, get, llen, ttl, hgetall:
 		if cmdLen != 2 {
 			return cmd, errors.New("Expected 2 arguments")
 		}
 		cmd.Key = cmds[1]
-	default:
-		switch cmd.Actions {
-		case set:
-			if cmdLen != 4 {
-				return cmd, errors.New("Expected 4 arguments")
-			}
-			cmd.Values = cmds[3:4]
-		case expire:
-			if cmdLen != 3 {
-				return cmd, errors.New("Expected 3 arguments")
-			}
-			cmd.Key = cmds[1]
-			if cmd.Expire, err = parseDudation(cmds[2]); err != nil {
-				return cmd, e.Wrap(err, "Invalid expiration time value")
-			}
-			return cmd, nil
-		case lget:
-			if cmdLen != 4 {
-				return cmd, errors.New("Expected 4 arguments")
-			}
-			cmd.Key = cmds[1]
-			cmd.Values = cmds[2:4]
-			return cmd, nil
-
-		case lpush, rpush:
-			if cmdLen < 3 {
-				return cmd, errors.New("Expected at list 3 arguments")
-			}
-			cmd.Key = cmds[1]
-			cmd.Values = cmds[2:]
-			return cmd, nil
-		default:
-			if cmdLen < 4 {
-				return cmd, errors.New("Expected at list 4 arguments")
-			}
-			cmd.Values = cmds[3:]
-		}
-
-		if cmd.Expire, err = parseDudation(cmds[2]); err != nil {
-			return cmd, e.Wrap(err, "Invalid expiration time value")
+		return cmd, nil
+	case lget:
+		if cmdLen != 4 {
+			return cmd, errors.New("Expected 4 arguments")
 		}
 		cmd.Key = cmds[1]
+		cmd.Values = cmds[2:4]
+		return cmd, nil
+	case lpush, rpush, set, hset, hget:
+		if cmdLen < 3 {
+			return cmd, errors.New("Expected at list 3 arguments")
+		}
+		cmd.Key = cmds[1]
+		cmd.Values = cmds[2:]
+		return cmd, nil
+	default:
+		return cmd, fmt.Errorf("Undefined cmd")
 	}
-
-	return cmd, nil
 }
 
 //set(key string, value interface{}, expiration time.Duration)

@@ -195,7 +195,6 @@ func (s *Server) serveChannels(ctx context.Context) error {
 		select {
 		case <-ticker.C:
 			s.raft.node.Tick()
-
 		// store raft entries to wal, then publish over commit channel
 		case rd := <-s.raft.node.Ready():
 			if err := s.raft.wal.Save(rd.HardState, rd.Entries); err != nil {
@@ -217,7 +216,7 @@ func (s *Server) serveChannels(ctx context.Context) error {
 				}
 			}
 
-			//Вросим запиши в Raft Storage
+			//Вносим запиши в Raft Storage
 			if err := s.raft.raftStorage.Append(rd.Entries); err != nil {
 				return err
 			}
@@ -245,7 +244,6 @@ func (s *Server) serveChannels(ctx context.Context) error {
 
 		case err := <-s.raft.transport.ErrorC:
 			return err
-
 		case <-ctx.Done():
 			return nil
 		}

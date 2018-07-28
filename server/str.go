@@ -1,11 +1,13 @@
 package server
 
+import "time"
+
 func (st *storages) getSTR(key string) ([]byte, error) {
 	if s, ok := st.data[key]; ok {
 		if s.str == nil {
 			return nil, ErrKeyHaveAnotherType
 		}
-		if _, err := checkKeyExpire(s.expired); err != nil {
+		if _, err := checkKeyExpire(time.Now(), s.expired); err != nil {
 			return nil, err
 		}
 		return s.str, nil

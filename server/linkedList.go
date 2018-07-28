@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/JIEHT9U/raft-redis/list"
 	"github.com/pkg/errors"
@@ -14,7 +15,7 @@ func (st *storages) getLinkedList(key string) (*list.LinkedList, error) {
 		if s.linkedList == nil {
 			return nil, ErrKeyHaveAnotherType
 		}
-		if _, err := checkKeyExpire(s.expired); err != nil {
+		if _, err := checkKeyExpire(time.Now(), s.expired); err != nil {
 			return nil, err
 		}
 		return s.linkedList, nil
