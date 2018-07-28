@@ -199,10 +199,6 @@ func (s *Server) runServer(ctx context.Context) error {
 		select {
 
 		case cc := <-s.raft.confChangeC:
-
-			PrePrint, _ := json.MarshalIndent(cc, "", "  ")
-			s.logger.Debug("s.raft.confChangeC:", string(PrePrint))
-
 			confChangeCount++
 			cc.ID = confChangeCount
 			if err := s.raft.node.ProposeConfChange(context.TODO(), cc); err != nil {
@@ -211,51 +207,49 @@ func (s *Server) runServer(ctx context.Context) error {
 
 		case requests := <-s.requests:
 			switch requests.cmd.Actions {
-			case hget, hgetall:
-				if _, err := s.st.getHashTable(requests.cmd.Key); err != nil {
-					if err == ErrKeyHaveAnotherType {
-						if err := responceWraper(requests.response, nil, err); err != nil {
-							s.logger.Error(err)
-							continue
-						}
+			case hset:
+				_, err := s.st.getHashTable(requests.cmd.Key)
+				if err == ErrKeyHaveAnotherType {
+					if err := responceWraper(requests.response, nil, err); err != nil {
 						s.logger.Error(err)
 						continue
 					}
+					s.logger.Error(err)
+					continue
 				}
 
 				if err := responceWraper(requests.response, nil, s.proposeCMD(requests.cmd)); err != nil {
 					s.logger.Error(err)
 				}
 			case lpush, rpush:
-				if _, err := s.st.getLinkedList(requests.cmd.Key); err != nil {
-					if err == ErrKeyHaveAnotherType {
-						if err := responceWraper(requests.response, nil, err); err != nil {
-							s.logger.Error(err)
-							continue
-						}
+				_, err := s.st.getLinkedList(requests.cmd.Key)
+				if err == ErrKeyHaveAnotherType {
+					if err := responceWraper(requests.response, nil, err); err != nil {
 						s.logger.Error(err)
 						continue
 					}
+					s.logger.Error(err)
+					continue
 				}
 
 				if err := responceWraper(requests.response, nil, s.proposeCMD(requests.cmd)); err != nil {
 					s.logger.Error(err)
 				}
 			case set:
-				if _, err := s.st.getLinkedList(requests.cmd.Key); err != nil {
-					if err == ErrKeyHaveAnotherType {
-						if err := responceWraper(requests.response, nil, err); err != nil {
-							s.logger.Error(err)
-							continue
-						}
+				_, err := s.st.getSTR(requests.cmd.Key)
+				if err == ErrKeyHaveAnotherType {
+					if err := responceWraper(requests.response, nil, err); err != nil {
 						s.logger.Error(err)
 						continue
 					}
+					s.logger.Error(err)
+					continue
 				}
 
 				if err := responceWraper(requests.response, nil, s.proposeCMD(requests.cmd)); err != nil {
 					s.logger.Error(err)
 				}
+
 			case del, expire:
 				if err := responceWraper(requests.response, nil, s.proposeCMD(requests.cmd)); err != nil {
 					s.logger.Error(err)
@@ -277,6 +271,16 @@ func (s *Server) runServer(ctx context.Context) error {
 				}
 			case lget:
 				data, err := s.st.lget(requests.cmd.Key, requests.cmd.Values[0], requests.cmd.Values[1])
+				if err := responceWraper(requests.response, data, s.initRemoveProcess(requests.cmd.Key, err)); err != nil {
+					s.logger.Error(err)
+				}
+			case hget:
+				data, err := s.st.hget(requests.cmd.Key, requests.cmd.Values[0])
+				if err := responceWraper(requests.response, data, s.initRemoveProcess(requests.cmd.Key, err)); err != nil {
+					s.logger.Error(err)
+				}
+			case hgetall:
+				data, err := s.st.hgetall(requests.cmd.Key)
 				if err := responceWraper(requests.response, data, s.initRemoveProcess(requests.cmd.Key, err)); err != nil {
 					s.logger.Error(err)
 				}
@@ -332,12 +336,12 @@ func (s *Server) receiveCommitMSG(msg *string) error {
 func (s *Server) applyCMD(cmd cmd) error {
 
 	switch cmd.Actions {
+	case hset:
+		return s.st.hset(cmd.Key, cmd.Values[0], cmd.Values[1])
 	case set:
-		s.st.set(cmd.Key, cmd.Values[0], cmd.Expire)
-		return nil
+		return s.st.set(cmd.Key, cmd.Values[0])
 	case del:
-		s.st.del(cmd.Key)
-		return nil
+		return s.st.del(cmd.Key)
 	case lpush:
 		return s.st.lpush(cmd.Key, cmd.Values)
 	case rpush:

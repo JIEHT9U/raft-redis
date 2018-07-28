@@ -34,10 +34,10 @@ type storage struct {
 	expired    int64
 	linkedList *list.LinkedList
 	vocabulary map[string][]byte
-	str        string
+	str        []byte
 }
 
-func convertToBytesAndHash(data string) ([]byte, string, error) {
+func convertToBytesAndHash(data ...interface{}) ([]byte, string, error) {
 	var buf bytes.Buffer
 	var h = sha256.New()
 	if err := gob.NewEncoder(&buf).Encode(data); err != nil {
@@ -67,10 +67,6 @@ func checkKeyExpire(exp int64) (int, error) {
 	return 0, ErrTimeExpired
 }
 
-func (st *storages) set(key, value string, expireTime int64) {
-	st.data[key] = storage{str: value, expired: expireTime}
-}
-
 func (st *storages) expire(key string, expireTime int64) error {
 	if data, ok := st.data[key]; ok {
 		st.data[key] = storage{
@@ -84,20 +80,6 @@ func (st *storages) expire(key string, expireTime int64) error {
 	return ErrKeyNotFound
 }
 
-func (st *storages) get(key string) ([]byte, error) {
-	if value, ok := st.data[key]; ok {
-		lastExp, err := checkKeyExpire(value.expired)
-		if err != nil {
-			return nil, err
-		}
-		if value.str == "" {
-			return nil, ErrKeyHaveAnotherType
-		}
-		return []byte(fmt.Sprintf("%s %d", value.str, lastExp)), nil
-	}
-	return nil, ErrKeyNotFound
-}
-
 func (st *storages) ttl(key string) ([]byte, error) {
 	if value, ok := st.data[key]; ok {
 		lastExp, err := checkKeyExpire(value.expired)
@@ -109,6 +91,10 @@ func (st *storages) ttl(key string) ([]byte, error) {
 	return nil, ErrKeyNotFound
 }
 
-func (st *storages) del(key string) {
-	delete(st.data, key)
+func (st *storages) del(key string) error {
+	if _, ok := st.data[key]; ok {
+		delete(st.data, key)
+		return nil
+	}
+	return ErrKeyNotFound
 }
