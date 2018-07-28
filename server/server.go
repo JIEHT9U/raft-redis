@@ -13,6 +13,7 @@ import (
 	"time"
 
 	i "github.com/JIEHT9U/raft-redis/init"
+	"github.com/JIEHT9U/raft-redis/signal"
 	"github.com/coreos/etcd/etcdserver/api/snap"
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
@@ -25,7 +26,6 @@ import (
 type Server struct {
 	listenAddr *net.TCPAddr
 	logger     *zap.SugaredLogger
-	shutdown   <-chan struct{}
 	requests   chan request
 	getSnap    chan storages
 	raft       *raftNode
@@ -43,14 +43,13 @@ type resp struct {
 }
 
 //New return new type *Server
-func New(initParam *i.Params, logger *zap.Logger, shutdown <-chan struct{}) *Server {
+func New(initParam *i.Params, logger *zap.Logger) *Server {
 	snapDir := fmt.Sprintf("%s/%d/snap", initParam.RaftDataDir, initParam.NodeID)
 
 	return &Server{
 		getSnap:    make(chan storages),
 		listenAddr: initParam.ListenAddr,
 		logger:     logger.Sugar(),
-		shutdown:   shutdown,
 		st: storages{
 			data: make(map[string]storage),
 		},
@@ -90,7 +89,9 @@ func (s *Server) Run() error {
 		return s.runTCPListener(listener)
 	}, func(err error) {
 		s.errorsWraps(err, "Error stop TCP listener", "Stop TCP listener")
-		listener.Close()
+		if err := listener.Close(); err != nil {
+			s.logger.Error(err)
+		}
 	})
 
 	ctx, cansel := context.WithCancel(context.Background())
@@ -111,9 +112,12 @@ func (s *Server) Run() error {
 		return s.runRAFTListener(raftListener)
 	}, func(err error) {
 		s.errorsWraps(err, "Error RAFT Listener", "Exit RAFT Listener")
-		raftListener.Close()
+		if err := raftListener.Close(); err != nil {
+			s.logger.Error(err)
+		}
 	})
 
+	ctx, cansel = context.WithCancel(context.Background())
 	g.Add(func() error {
 		s.logger.Info("Start serveChannels")
 		return s.serveChannels(ctx)
@@ -122,12 +126,15 @@ func (s *Server) Run() error {
 		cansel()
 	})
 
+	stopSig := signal.SetupSignalHandler()
 	//Shutdown
 	g.Add(func() error {
-		<-s.shutdown
+		<-stopSig
 		s.logger.Info("Resive Shutdown signal")
 		return nil
-	}, func(err error) {})
+	}, func(err error) {
+		close(stopSig)
+	})
 
 	return g.Run()
 }

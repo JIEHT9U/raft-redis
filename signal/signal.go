@@ -8,8 +8,8 @@ import (
 
 var shutdownSignals = []os.Signal{os.Interrupt, syscall.SIGTERM}
 
-//SetupSignalHandler
-func SetupSignalHandler() (stopCh <-chan struct{}) {
+//SetupSignalHandler sdfsdf
+func SetupSignalHandler() (stopCh chan struct{}) {
 	stop := make(chan struct{})
 	c := make(chan os.Signal, 2)
 	signal.Notify(c, shutdownSignals...)

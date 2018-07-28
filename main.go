@@ -9,7 +9,6 @@ import (
 	i "github.com/JIEHT9U/raft-redis/init"
 	"github.com/JIEHT9U/raft-redis/logger"
 	"github.com/JIEHT9U/raft-redis/server"
-	"github.com/JIEHT9U/raft-redis/signal"
 
 	"github.com/joho/godotenv"
 )
@@ -43,7 +42,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	srv := server.New(initParams, logging, signal.SetupSignalHandler())
+	srv := server.New(initParams, logging)
 
 	if err := srv.InitRaft(); err != nil {
 		fmt.Fprint(os.Stderr, err)
