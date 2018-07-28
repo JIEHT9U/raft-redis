@@ -391,6 +391,7 @@ func responceWraper(response chan resp, data []byte, err error) error {
 	case response <- resp{data: data, err: err}:
 		return nil
 	default:
+		close(response)
 		return fmt.Errorf("Error send response MSG [%s]", string(data))
 	}
 }

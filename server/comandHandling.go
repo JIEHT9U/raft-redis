@@ -70,7 +70,6 @@ func (s *Server) commandHandling(cmds []string) ([]byte, error) {
 	}
 
 	resp := make(chan resp, 1)
-	defer close(resp)
 
 	select {
 	case s.requests <- request{cmd: cmd, response: resp}:
@@ -78,10 +77,13 @@ func (s *Server) commandHandling(cmds []string) ([]byte, error) {
 		return nil, errors.New("Error send data requests channel is full")
 	}
 
-	if data, ok := <-resp; ok {
+	select {
+	case data := <-resp:
 		return data.data, data.err
+	case <-time.After(time.Second * 3):
+		return nil, errors.New("Error get data from channel resp time out")
 	}
-	return nil, errors.New("Error get data from channel resp")
+
 }
 
 func commandParse(cmds []string) (cmd cmd, err error) {
@@ -97,7 +99,7 @@ func commandParse(cmds []string) (cmd cmd, err error) {
 			return cmd, errors.New("Expected 3 arguments")
 		}
 		cmd.Key = cmds[1]
-		if cmd.Expire, err = parseDudation(cmds[2]); err != nil {
+		if cmd.Expire, err = parseDudation(time.Now(), cmds[2]); err != nil {
 			return cmd, e.Wrap(err, "Invalid expiration time value")
 		}
 		return cmd, nil
@@ -161,19 +163,13 @@ func parseCommandType(cmd string) (command, error) {
 	}
 }
 
-func parseDudation(expire string) (int64, error) {
+func parseDudation(currentTime time.Time, expire string) (int64, error) {
 	sec, err := strconv.ParseInt(expire, 10, 64)
 	if err != nil {
 		return 0, err
 	}
-	if sec < 0 {
+	if sec <= 0 {
 		return -1, nil
 	}
-	return time.Now().Add(time.Duration(sec) * time.Second).UnixNano(), nil
+	return currentTime.Add(time.Duration(sec) * time.Second).UnixNano(), nil
 }
-
-/* func parseKey(key string) []byte {
-	h := sha256.New()
-	h.Write([]byte(key))
-	return h.Sum(nil)
-} */
