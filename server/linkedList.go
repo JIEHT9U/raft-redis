@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"fmt"
 	"strconv"
 
 	"github.com/JIEHT9U/raft-redis/list"
@@ -74,41 +75,67 @@ func (st *storages) llen(key string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return []byte("len:" + strconv.FormatInt(ll.Count(), 64)), nil
+	return []byte(fmt.Sprintf("len: %d", ll.Count())), nil
 }
 
-func (st *storages) rpush(key string, value string) error {
+func (st *storages) rpush(key string, value []string) error {
 
-	dataBytes, hash, err := convertToBytesAndHash(value)
-	if err != nil {
-		return err
-	}
 	if s, ok := st.data[key]; ok {
 		if s.linkedList == nil {
 			return ErrKeyHaveAnotherType
 		}
-		s.linkedList.AddLast(hash, dataBytes)
+
+		for _, val := range value {
+			dataBytes, hash, err := convertToBytesAndHash(val)
+			if err != nil {
+				return err
+			}
+			s.linkedList.AddLast(hash, dataBytes)
+		}
+
 		return nil
 	}
-	st.data[key] = storage{linkedList: list.Create().AddLast(hash, dataBytes), expired: -1}
+
+	ll := list.Create()
+	for _, val := range value {
+		dataBytes, hash, err := convertToBytesAndHash(val)
+		if err != nil {
+			return err
+		}
+		ll.AddLast(hash, dataBytes)
+	}
+
+	st.data[key] = storage{linkedList: ll, expired: -1}
 	return nil
 }
 
-func (st *storages) lpush(key string, value string) error {
-
-	dataBytes, hash, err := convertToBytesAndHash(value)
-	if err != nil {
-		return err
-	}
+func (st *storages) lpush(key string, value []string) error {
 
 	if s, ok := st.data[key]; ok {
 		if s.linkedList == nil {
 			return ErrKeyHaveAnotherType
 		}
-		s.linkedList.AddFirst(hash, dataBytes)
+
+		for _, val := range value {
+			dataBytes, hash, err := convertToBytesAndHash(val)
+			if err != nil {
+				return err
+			}
+			s.linkedList.AddFirst(hash, dataBytes)
+		}
+
 		return nil
 	}
 
-	st.data[key] = storage{linkedList: list.Create().AddFirst(hash, dataBytes), expired: -1}
+	ll := list.Create()
+	for _, val := range value {
+		dataBytes, hash, err := convertToBytesAndHash(val)
+		if err != nil {
+			return err
+		}
+		ll.AddFirst(hash, dataBytes)
+	}
+
+	st.data[key] = storage{linkedList: ll, expired: -1}
 	return nil
 }

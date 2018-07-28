@@ -15,31 +15,33 @@ import (
 type command uint
 
 const (
-	set    command = iota
-	get    command = iota
-	del    command = iota
-	hmset  command = iota
-	hget   command = iota
-	llen   command = iota
-	lget   command = iota
-	rpush  command = iota
-	lpush  command = iota
-	expire command = iota
-	ttl    command = iota
+	set command = iota
+	get
+	del
+	llen
+	lget
+	rpush
+	lpush
+	expire
+	ttl
+	hgetall
+	hget
+	hset
 )
 
 var cmdMapToString = map[command]string{
-	set:    "SET",
-	get:    "GET",
-	del:    "DEL",
-	hmset:  "HMSET",
-	hget:   "HGET",
-	llen:   "LLEN",
-	lget:   "LGET",
-	rpush:  "RPUSH",
-	lpush:  "LPUSH",
-	expire: "EXPIRE",
-	ttl:    "TTL",
+	set:     "SET",
+	get:     "GET",
+	del:     "DEL",
+	hget:    "HGET",
+	hset:    "HSET",
+	hgetall: "HGETALL",
+	llen:    "LLEN",
+	lget:    "LGET",
+	rpush:   "RPUSH",
+	lpush:   "LPUSH",
+	expire:  "EXPIRE",
+	ttl:     "TTL",
 }
 
 func (c command) String() string {
@@ -102,14 +104,6 @@ func commandParse(cmds []string) (cmd cmd, err error) {
 				return cmd, errors.New("Expected 4 arguments")
 			}
 			cmd.Values = cmds[3:4]
-
-		case lpush, rpush:
-			if cmdLen != 3 {
-				return cmd, errors.New("Expected 3 arguments")
-			}
-			cmd.Key = cmds[1]
-			cmd.Values = cmds[2:3]
-			return cmd, nil
 		case expire:
 			if cmdLen != 3 {
 				return cmd, errors.New("Expected 3 arguments")
@@ -125,6 +119,14 @@ func commandParse(cmds []string) (cmd cmd, err error) {
 			}
 			cmd.Key = cmds[1]
 			cmd.Values = cmds[2:4]
+			return cmd, nil
+
+		case lpush, rpush:
+			if cmdLen < 3 {
+				return cmd, errors.New("Expected at list 3 arguments")
+			}
+			cmd.Key = cmds[1]
+			cmd.Values = cmds[2:]
 			return cmd, nil
 		default:
 			if cmdLen < 4 {
@@ -153,10 +155,12 @@ func parseCommandType(cmd string) (command, error) {
 	case "del":
 		return del, nil
 	// HMAP storage
-	case "hmset":
-		return hmset, nil
+	case "hgetall":
+		return hgetall, nil
 	case "hget":
 		return hget, nil
+	case "hset":
+		return hset, nil
 	// LinkedList storage
 	case "rpush":
 		return rpush, nil

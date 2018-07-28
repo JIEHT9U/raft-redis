@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/JIEHT9U/raft-redis/list"
-	"github.com/JIEHT9U/raft-redis/vocabulary"
 	"github.com/pkg/errors"
 )
 
@@ -17,6 +16,7 @@ import (
 var (
 	ErrTimeExpired        = errors.New("key time expired")
 	ErrKeyNotFound        = errors.New("key not found")
+	ErrFildNotFound       = errors.New("fild not found")
 	ErrKeyHaveAnotherType = errors.New("key have another type")
 )
 
@@ -33,7 +33,7 @@ type storages struct {
 type storage struct {
 	expired    int64
 	linkedList *list.LinkedList
-	vocabulary vocabulary.Store
+	vocabulary map[string][]byte
 	str        string
 }
 

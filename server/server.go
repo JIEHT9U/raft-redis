@@ -57,20 +57,20 @@ func New(initParam *i.Params, logger *zap.Logger, shutdown <-chan struct{}) *Ser
 
 		requests: make(chan request, 1),
 		raft: &raftNode{
-			electionTick:     10,
-			heartbeatTick:    1,
+			electionTick:     initParam.ElectionTick,
+			heartbeatTick:    initParam.HeartbeatTick,
 			id:               initParam.NodeID,
 			join:             initParam.RaftJoin,
 			confChangeC:      make(chan raftpb.ConfChange),
 			commitC:          make(chan *string, 1),
 			peers:            strings.Split(initParam.RaftPeers, ","),
 			waldir:           fmt.Sprintf("%s/%d/wal", initParam.RaftDataDir, initParam.NodeID),
-			snapCount:        10000,
+			snapCount:        initParam.SnapCount,
 			snapdir:          snapDir,
 			snapshotterReady: make(chan *snap.Snapshotter, 1),
 			snapshotter:      snap.New(logger, snapDir),
 
-			//Создаем новый raft Storage куда будут загружены данные из снапшота
+			//Создаем новый RAFT Storage куда будут загружены данные из снапшота
 			raftStorage: raft.NewMemoryStorage(),
 		},
 	}
@@ -211,6 +211,21 @@ func (s *Server) runServer(ctx context.Context) error {
 
 		case requests := <-s.requests:
 			switch requests.cmd.Actions {
+			case hget, hgetall:
+				if _, err := s.st.getHashTable(requests.cmd.Key); err != nil {
+					if err == ErrKeyHaveAnotherType {
+						if err := responceWraper(requests.response, nil, err); err != nil {
+							s.logger.Error(err)
+							continue
+						}
+						s.logger.Error(err)
+						continue
+					}
+				}
+
+				if err := responceWraper(requests.response, nil, s.proposeCMD(requests.cmd)); err != nil {
+					s.logger.Error(err)
+				}
 			case lpush, rpush:
 				if _, err := s.st.getLinkedList(requests.cmd.Key); err != nil {
 					if err == ErrKeyHaveAnotherType {
@@ -226,7 +241,22 @@ func (s *Server) runServer(ctx context.Context) error {
 				if err := responceWraper(requests.response, nil, s.proposeCMD(requests.cmd)); err != nil {
 					s.logger.Error(err)
 				}
-			case set, del, expire:
+			case set:
+				if _, err := s.st.getLinkedList(requests.cmd.Key); err != nil {
+					if err == ErrKeyHaveAnotherType {
+						if err := responceWraper(requests.response, nil, err); err != nil {
+							s.logger.Error(err)
+							continue
+						}
+						s.logger.Error(err)
+						continue
+					}
+				}
+
+				if err := responceWraper(requests.response, nil, s.proposeCMD(requests.cmd)); err != nil {
+					s.logger.Error(err)
+				}
+			case del, expire:
 				if err := responceWraper(requests.response, nil, s.proposeCMD(requests.cmd)); err != nil {
 					s.logger.Error(err)
 				}
@@ -309,9 +339,9 @@ func (s *Server) applyCMD(cmd cmd) error {
 		s.st.del(cmd.Key)
 		return nil
 	case lpush:
-		return s.st.lpush(cmd.Key, cmd.Values[0])
+		return s.st.lpush(cmd.Key, cmd.Values)
 	case rpush:
-		return s.st.rpush(cmd.Key, cmd.Values[0])
+		return s.st.rpush(cmd.Key, cmd.Values)
 	case expire:
 		return s.st.expire(cmd.Key, cmd.Expire)
 	default:

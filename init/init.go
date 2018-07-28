@@ -10,11 +10,14 @@ import (
 
 //Params type
 type Params struct {
-	ListenAddr  *net.TCPAddr
-	RaftPeers   string
-	RaftJoin    bool
-	NodeID      int
-	RaftDataDir string
+	ListenAddr    *net.TCPAddr
+	RaftPeers     string
+	RaftJoin      bool
+	NodeID        int
+	RaftDataDir   string
+	SnapCount     uint64
+	ElectionTick  int
+	HeartbeatTick int
 }
 
 //Param return init param
@@ -47,6 +50,21 @@ func Param() (*Params, error) {
 		Envar("ID").
 		Default("1").
 		IntVar(&init.NodeID)
+
+	a.Flag("snap-count", "").
+		Envar("SNAP_COUNT").
+		Default("10000").
+		Uint64Var(&init.SnapCount)
+
+	a.Flag("election-tick", "").
+		Envar("ELECTION_TICK").
+		Default("10").
+		IntVar(&init.ElectionTick)
+
+	a.Flag("heartbeat-tick", "").
+		Envar("HEARTBEAT_TICK").
+		Default("1").
+		IntVar(&init.HeartbeatTick)
 
 	_, err := a.Parse(os.Args[1:])
 	if err != nil {
