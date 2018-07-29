@@ -22,7 +22,7 @@ import (
 	"go.uber.org/zap"
 )
 
-//Server type
+//Server contains the parameters to start a server.
 type Server struct {
 	listenAddr  *net.TCPAddr
 	logger      *zap.SugaredLogger
@@ -43,7 +43,7 @@ type resp struct {
 	data []byte
 }
 
-//New return new type *Server
+// New returns a server to the GoRedis specified by Options.
 func New(initParam *i.Params, logger *zap.Logger) *Server {
 	snapDir := fmt.Sprintf("%s/%d/snap", initParam.RaftDataDir, initParam.NodeID)
 
@@ -89,7 +89,7 @@ func (s *Server) Run() error {
 
 	g.Add(func() error {
 		s.logger.Debugf("TCP listener %s", s.listenAddr.String())
-		return s.runTCPListener(listener.(*net.TCPListener))
+		return s.runTCPListener(listener)
 	}, func(err error) {
 		if err := listener.Close(); err != nil {
 			s.logger.Error(err)

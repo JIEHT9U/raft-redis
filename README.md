@@ -18,11 +18,17 @@ Storage support several types of data Hash Tabe, Linked List and String with the
 docker-compose up
 ```
 
-### Client Connection
+
+### Connected to the GoRedis server
 
 ```bash
 telnet 127.0.0.1 3000
 ```
+
+### Several tests
+
+* [comandHandling_test.go](https://github.com/JIEHT9U/raft-redis/blob/master/server/comandHandling_test.go)
+* [hashTable_test.go](https://github.com/JIEHT9U/raft-redis/blob/master/server/hashTable_test.go)
 
 ### Operators:
 

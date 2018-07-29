@@ -9,17 +9,34 @@ import (
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
-//Params type
+//Params contains the parameters to initial a server.
 type Params struct {
-	ListenAddr    *net.TCPAddr
-	RaftPeers     string
-	RaftJoin      bool
-	NodeID        int
-	RaftDataDir   string
-	SnapCount     uint64
-	ElectionTick  int
+	//ListenAddr
+	ListenAddr *net.TCPAddr
+	//Список узлов в кластере разделённых запятой
+	RaftPeers string
+	//RaftJoin неоходимо установить в true если
+	//необходимо доавить узел в существующий кластер
+	RaftJoin bool
+	//Должен быть уникальным для каждой node в кластере
+	NodeID int
+	//Директория где будут храниться snapshot и сами данные
+	RaftDataDir string
+	//Определяет периодичность снятия snapshot
+	SnapCount uint64
+	// ElectionTick - количество вызовов Node.Tick, которые должны проходить между
+	// выборы. То есть, если follower не получает никакого сообщения от
+	// лидер текущего term до истечения ElectionTick, он станет
+	// кандидат и начать выборы. ElectionTick должно быть больше, чем
+	// HeartbeatTick. Мы предлагаем ElectionTick = 10 * HeartbeatTick, чтобы избежать
+	// ненужное переключение лидера.
+	ElectionTick int
+	// HeartbeatTick - количество вызовов Node.Tick, которые должны проходить между
+	// heartbeat. То есть лидер посылает сообщения о heartbeat для поддержания своих
+	// лидерство каждый HeartbeatTick ticks.
 	HeartbeatTick int
-	IdleTimeout   time.Duration
+	//Тайм-аут ожидания закрытия TCP соединения
+	IdleTimeout time.Duration
 }
 
 //Param return init param
