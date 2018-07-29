@@ -1,0 +1,47 @@
+project_name: raft-redis
+release:
+  github:
+    owner: JIEHT9U
+    name: raft-redis
+  name_template: '{{.Tag}}'
+builds:
+- goos:
+  - linux
+  - darwin
+  env:
+    - CGO_ENABLED=0  
+  goarch:
+  - amd64
+  main: ./src/bot/main.go
+  # https://golang.org/cmd/link/
+  #-s => Опустите таблицу символов и отладочную информацию.
+  #-w => Опустите таблицу символов DWARF. 
+  ldflags: -s  -X main.Version={{.Version}}  -X main.BuildTime={{.Date}}
+  binary: raft-redis
+archive:
+  format: tar.gz
+  name_template: '{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{
+    .Arm }}{{ end }}'
+  files:
+  - licence*
+  - LICENCE*
+  - license*
+  - LICENSE*
+  - readme*
+  - README*
+  - changelog*
+  - CHANGELOG*
+
+dockers:
+  -
+    # GOOS of the built binary that should be used.
+    goos: linux
+    # GOARCH of the built binary that should be used.
+    goarch: amd64
+    binary: raft-redis
+    image: jieht9u/raft-redis
+    tag_templates:
+    - "{{ .Tag }}"
+    - "v{{ .Major }}"
+    - "{{ .Major }}.{{ .Minor }}"
+    - latest
