@@ -24,12 +24,13 @@ import (
 
 //Server type
 type Server struct {
-	listenAddr *net.TCPAddr
-	logger     *zap.SugaredLogger
-	requests   chan request
-	getSnap    chan storages
-	raft       *raftNode
-	st         storages
+	listenAddr  *net.TCPAddr
+	logger      *zap.SugaredLogger
+	requests    chan request
+	getSnap     chan storages
+	raft        *raftNode
+	st          storages
+	idleTimeout time.Duration
 }
 
 type request struct {
@@ -47,9 +48,10 @@ func New(initParam *i.Params, logger *zap.Logger) *Server {
 	snapDir := fmt.Sprintf("%s/%d/snap", initParam.RaftDataDir, initParam.NodeID)
 
 	return &Server{
-		getSnap:    make(chan storages),
-		listenAddr: initParam.ListenAddr,
-		logger:     logger.Sugar(),
+		idleTimeout: time.Second * 5,
+		getSnap:     make(chan storages),
+		listenAddr:  initParam.ListenAddr,
+		logger:      logger.Sugar(),
 		st: storages{
 			data: make(map[string]storage),
 		},
@@ -84,11 +86,11 @@ func (s *Server) Run() error {
 	if err != nil {
 		return errors.Wrap(err, "Error starting TCP server.")
 	}
+
 	g.Add(func() error {
-		s.logger.Infof("TCP listener %s", s.listenAddr.String())
-		return s.runTCPListener(listener)
+		s.logger.Debugf("TCP listener %s", s.listenAddr.String())
+		return s.runTCPListener(listener.(*net.TCPListener))
 	}, func(err error) {
-		s.errorsWraps(err, "Error stop TCP listener", "Stop TCP listener")
 		if err := listener.Close(); err != nil {
 			s.logger.Error(err)
 		}
@@ -96,10 +98,9 @@ func (s *Server) Run() error {
 
 	ctx, cansel := context.WithCancel(context.Background())
 	g.Add(func() error {
-		s.logger.Info("Start main loop")
+		s.logger.Debug("Start main loop")
 		return s.runServer(ctx)
 	}, func(err error) {
-		s.errorsWraps(err, "Error exit main loop", "Exit main loop")
 		cansel()
 	})
 
@@ -111,18 +112,16 @@ func (s *Server) Run() error {
 	g.Add(func() error {
 		return s.runRAFTListener(raftListener)
 	}, func(err error) {
-		s.errorsWraps(err, "Error RAFT Listener", "Exit RAFT Listener")
 		if err := raftListener.Close(); err != nil {
 			s.logger.Error(err)
 		}
 	})
 
-	ctx, cansel = context.WithCancel(context.Background())
+	// ctx, cansel = context.WithCancel(context.Background())
 	g.Add(func() error {
-		s.logger.Info("Start serveChannels")
+		s.logger.Debug("Start serveChannels")
 		return s.serveChannels(ctx)
 	}, func(err error) {
-		s.errorsWraps(err, "Error serveChannels loop", "Exit serveChannels loop")
 		cansel()
 	})
 
@@ -130,9 +129,9 @@ func (s *Server) Run() error {
 	//Shutdown
 	g.Add(func() error {
 		<-stopSig
-		s.logger.Info("Resive Shutdown signal")
 		return nil
 	}, func(err error) {
+		s.errorsWraps(err, "Error exit main process", "Exit main process")
 		close(stopSig)
 	})
 
@@ -149,11 +148,12 @@ func (s *Server) errorsWraps(err error, e, str string) {
 
 func (s *Server) runTCPListener(l net.Listener) error {
 	for {
-		conn, err := l.Accept()
+		con, err := l.Accept()
 		if err != nil {
 			return errors.Wrap(err, "Error accepting")
 		}
-		go s.connHandler(conn)
+		con.SetDeadline(time.Now().Add(s.idleTimeout))
+		go s.connHandler(con)
 	}
 }
 
@@ -163,11 +163,10 @@ func (s *Server) connHandler(conn net.Conn) {
 
 	s.logger.Infof("Start new connections %s", remoteAddr)
 
-	if _, err := fmt.Fprintf(conn, "[%s] > %s\n\r", remoteAddr, "Success server connection"); err != nil {
+	if _, err := fmt.Fprintf(conn, "%s\n\r[%s] > ", "Success server connection", remoteAddr); err != nil {
 		s.logger.Errorf("Error write err msg clinet [%s]", err)
 		return
 	}
-
 	scanner := bufio.NewScanner(conn)
 
 	for scanner.Scan() {
@@ -176,16 +175,17 @@ func (s *Server) connHandler(conn net.Conn) {
 			s.logger.Info("Close connection resive 'exit'")
 			return
 		default:
+			conn.SetDeadline(time.Now().Add(s.idleTimeout))
 			out, err := s.commandHandling(strings.Fields(line))
 			if err != nil {
 				s.logger.Error(err)
-				if _, err := fmt.Fprintf(conn, "[%s] ✘ > %s\n\r", remoteAddr, err.Error()); err != nil {
+				if _, err := fmt.Fprintf(conn, "%s\n\r[%s] > ", err.Error(), remoteAddr); err != nil {
 					s.logger.Errorf("Error write err msg clinet [%s]", err)
 					return
 				}
 				continue
 			}
-			if _, err := fmt.Fprintf(conn, "[%s] > %s\n\r", remoteAddr, out); err != nil {
+			if _, err := fmt.Fprintf(conn, "%s\n\r[%s] > ", out, remoteAddr); err != nil {
 				s.logger.Errorf("Error write err msg clinet [%s]", err)
 				return
 			}
@@ -225,7 +225,7 @@ func (s *Server) runServer(ctx context.Context) error {
 					continue
 				}
 
-				if err := responceWraper(requests.response, nil, s.proposeCMD(requests.cmd)); err != nil {
+				if err := responceWraper(requests.response, []byte("OK"), s.proposeCMD(requests.cmd)); err != nil {
 					s.logger.Error(err)
 				}
 			case lpush, rpush:
@@ -239,7 +239,7 @@ func (s *Server) runServer(ctx context.Context) error {
 					continue
 				}
 
-				if err := responceWraper(requests.response, nil, s.proposeCMD(requests.cmd)); err != nil {
+				if err := responceWraper(requests.response, []byte("OK"), s.proposeCMD(requests.cmd)); err != nil {
 					s.logger.Error(err)
 				}
 			case set:
@@ -253,12 +253,12 @@ func (s *Server) runServer(ctx context.Context) error {
 					continue
 				}
 
-				if err := responceWraper(requests.response, nil, s.proposeCMD(requests.cmd)); err != nil {
+				if err := responceWraper(requests.response, []byte("OK"), s.proposeCMD(requests.cmd)); err != nil {
 					s.logger.Error(err)
 				}
 
 			case del, expire:
-				if err := responceWraper(requests.response, nil, s.proposeCMD(requests.cmd)); err != nil {
+				if err := responceWraper(requests.response, []byte("OK"), s.proposeCMD(requests.cmd)); err != nil {
 					s.logger.Error(err)
 				}
 			case ttl:
@@ -299,7 +299,7 @@ func (s *Server) runServer(ctx context.Context) error {
 		case s.getSnap <- s.st:
 		case msg := <-s.raft.commitC:
 			if err := s.receiveCommitMSG(msg); err != nil {
-				s.logger.Error(err)
+				s.logger.Debug(err)
 			}
 		case <-ctx.Done():
 			return nil

@@ -42,7 +42,7 @@ func (s *Server) openWAL(snapshot *raftpb.Snapshot) (*wal.WAL, error) {
 func (s *Server) replayWAL() (*wal.WAL, error) {
 	s.logger.Infof("replaying WAL of member %d", s.raft.id)
 
-	////Пробуем заргузить снапшот
+	//Пробуем загрузить снапшот
 	snapshot, err := s.loadSnapshot()
 	if err != nil {
 		return nil, err
