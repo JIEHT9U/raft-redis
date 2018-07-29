@@ -46,16 +46,13 @@ func (st *storages) lget(key string, start, end string) ([]byte, error) {
 
 	var buf bytes.Buffer
 	var starPositions int
-	if _, err := buf.WriteString("\n\r"); err != nil {
-		return nil, err
-	}
 	for n := range ll.Next() {
 		if starPositions >= startInt && chechEndPos(starPositions, endInt) {
 			str, err := convertToStrong(n.Value)
 			if err != nil {
 				return nil, err
 			}
-			if _, err := buf.WriteString(str + "\n\r"); err != nil {
+			if _, err := buf.WriteString("\n\r" + str); err != nil {
 				return nil, err
 			}
 		}

@@ -21,6 +21,9 @@ func (st *storages) set(key, value string) error {
 		st.data[key] = storage{str: []byte(value), expired: -1}
 		return nil
 	}
+	if err == nil {
+		st.data[key] = storage{str: []byte(value), expired: -1}
+	}
 	return err
 }
 

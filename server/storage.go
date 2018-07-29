@@ -37,7 +37,7 @@ type storage struct {
 	str        []byte
 }
 
-func convertToBytesAndHash(data ...interface{}) ([]byte, string, error) {
+func convertToBytesAndHash(data interface{}) ([]byte, string, error) {
 	var buf bytes.Buffer
 	var h = sha256.New()
 	if err := gob.NewEncoder(&buf).Encode(data); err != nil {

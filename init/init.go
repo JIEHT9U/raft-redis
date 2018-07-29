@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"time"
 
 	"gopkg.in/alecthomas/kingpin.v2"
 )
@@ -18,6 +19,7 @@ type Params struct {
 	SnapCount     uint64
 	ElectionTick  int
 	HeartbeatTick int
+	IdleTimeout   time.Duration
 }
 
 //Param return init param
@@ -65,6 +67,11 @@ func Param() (*Params, error) {
 		Envar("HEARTBEAT_TICK").
 		Default("1").
 		IntVar(&init.HeartbeatTick)
+
+	a.Flag("idle-timeout", "").
+		Envar("IDLE_TIMEOUT").
+		Default("90s").
+		DurationVar(&init.IdleTimeout)
 
 	_, err := a.Parse(os.Args[1:])
 	if err != nil {

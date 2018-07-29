@@ -48,7 +48,7 @@ func New(initParam *i.Params, logger *zap.Logger) *Server {
 	snapDir := fmt.Sprintf("%s/%d/snap", initParam.RaftDataDir, initParam.NodeID)
 
 	return &Server{
-		idleTimeout: time.Second * 5,
+		idleTimeout: initParam.IdleTimeout,
 		getSnap:     make(chan storages),
 		listenAddr:  initParam.ListenAddr,
 		logger:      logger.Sugar(),
@@ -179,7 +179,7 @@ func (s *Server) connHandler(conn net.Conn) {
 			out, err := s.commandHandling(strings.Fields(line))
 			if err != nil {
 				s.logger.Error(err)
-				if _, err := fmt.Fprintf(conn, "%s\n\r[%s] > ", err.Error(), remoteAddr); err != nil {
+				if _, err := fmt.Fprintf(conn, "(%s)\n\r[%s] > ", err.Error(), remoteAddr); err != nil {
 					s.logger.Errorf("Error write err msg clinet [%s]", err)
 					return
 				}
