@@ -12,7 +12,7 @@ builds:
     - CGO_ENABLED=0  
   goarch:
   - amd64
-  main: ./src/bot/main.go
+  main: main.go
   # https://golang.org/cmd/link/
   #-s => Опустите таблицу символов и отладочную информацию.
   #-w => Опустите таблицу символов DWARF. 
