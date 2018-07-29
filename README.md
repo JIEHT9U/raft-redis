@@ -12,6 +12,12 @@ Storage support several types of data Hash Tabe, Linked List and String with the
 * save data to disk
 * TTL for each key 
 
+#### HSET
+![HSET](./.gif/HSET.gif)
+
+#### SET
+![SET](./.gif/SET.gif)
+
 ### Running a local GoRedis cluster
 
 ```bash
