@@ -1,5 +1,5 @@
 DOCKER_IMAGE     := jieht9u/go-redis-raft
-DOCKERFILE_LOCAL := Dockerfile
+DOCKERFILE_LOCAL := dockerfile
 
 GITVERSION		 := 0.0.1
 
