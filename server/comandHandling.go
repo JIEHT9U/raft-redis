@@ -24,9 +24,9 @@ const (
 	lpush
 	expire
 	ttl
-	hgetall
-	hget
 	hset
+	hget
+	hgetall
 )
 
 var cmdMapToString = map[command]string{

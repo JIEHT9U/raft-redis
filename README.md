@@ -2,12 +2,29 @@
 
 The project is created as a sample code. Not intended for `production`.
 
-GoRedis is written in Go and uses the Raft consensus algorithm to manage a highly-available replicated log.
+GoRedis is written in Go and uses the `Raft consensus algorithm` to manage a highly-available replicated log.
 
-Storage support supports several types of data Hash Tabe, Linked List и String with the ability to specify the expirationtime in seconds for each key.
+Storage support several types of data Hash Tabe, Linked List and String with the ability to specify the expirationtime in seconds for each key.
 
+### Capabilities
 
-Operators:
+* provide highly available
+* save data to disk
+* TTL for each key 
+
+### Running a local GoRedis cluster
+
+```bash
+docker-compose up
+```
+
+### Client Connection
+
+```bash
+telnet 127.0.0.1 3000
+```
+
+### Operators:
 
 * SET key value
 
