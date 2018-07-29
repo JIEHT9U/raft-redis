@@ -3,8 +3,6 @@ package server
 import (
 	"bytes"
 	"time"
-
-	"github.com/pkg/errors"
 )
 
 func (st *storages) getHashTable(key string) (map[string][]byte, error) {
@@ -31,6 +29,7 @@ func (st *storages) hset(key, field string, value string) error {
 	}
 	if err == nil {
 		ht[field] = []byte(value)
+		return nil
 	}
 
 	return err
@@ -57,14 +56,7 @@ func (st *storages) hgetall(key string) ([]byte, error) {
 		return nil, err
 	}
 
-	if len(ht) <= 0 {
-		return nil, errors.New("empty hash table")
-	}
-
 	var buf bytes.Buffer
-	// if _, err := buf.WriteString("\n\r"); err != nil {
-	// 	return nil, err
-	// }
 	for key, value := range ht {
 		if _, err := buf.WriteString("\n\r" + key + ":" + string(value)); err != nil {
 			return nil, err

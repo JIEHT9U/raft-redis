@@ -106,8 +106,45 @@ func Test_storages_hset(t *testing.T) {
 		args    args
 		wantErr bool
 	}{
-		// TODO: Add test cases.
+		{
+			name: "Success create news hash table t:1000",
+			args: args{key: "t:1000", field: "name", value: "Dmitry"},
+			fields: fields{
+				data: map[string]storage{},
+			},
+			wantErr: false,
+		},
+		{
+			name: "Success update t:1000 name fild",
+			args: args{key: "t:1000", field: "name", value: "Dmitry"},
+			fields: fields{
+				data: map[string]storage{
+					"t:1000": storage{
+						expired: -1,
+						vocabulary: map[string][]byte{
+							"name": []byte("Vova"),
+						},
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "Err  key have another type t:1000",
+			args: args{key: "t:1000", field: "name", value: "Dmitry"},
+			fields: fields{
+				data: map[string]storage{
+					"t:1000": storage{
+						expired:    -1,
+						str:        []byte("Hello"),
+						vocabulary: nil,
+					},
+				},
+			},
+			wantErr: true,
+		},
 	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			st := &storages{
@@ -135,7 +172,51 @@ func Test_storages_hget(t *testing.T) {
 		want    []byte
 		wantErr bool
 	}{
-		// TODO: Add test cases.
+		{
+			name: "Err  key have another type t:1000",
+			args: args{key: "t:1000", field: "name"},
+			fields: fields{
+				data: map[string]storage{
+					"t:1000": storage{
+						expired: -1,
+						str:     []byte("Hello"),
+					},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "Success get name fild",
+			args: args{key: "t:1000", field: "name"},
+			fields: fields{
+				data: map[string]storage{
+					"t:1000": storage{
+						expired: -1,
+						vocabulary: map[string][]byte{
+							"name": []byte("Dmitry"),
+						},
+					},
+				},
+			},
+			want:    []byte("Dmitry"),
+			wantErr: false,
+		},
+		{
+			name: "Error fild  name not found",
+			args: args{key: "t:1000", field: "name"},
+			fields: fields{
+				data: map[string]storage{
+					"t:1000": storage{
+						expired: -1,
+						vocabulary: map[string][]byte{
+							"email": []byte("Dmitry@mail.ru"),
+						},
+					},
+				},
+			},
+			want:    nil,
+			wantErr: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -168,7 +249,37 @@ func Test_storages_hgetall(t *testing.T) {
 		want    []byte
 		wantErr bool
 	}{
-		// TODO: Add test cases.
+
+		{
+			name: "Success get name fild",
+			args: args{key: "t:1000"},
+			fields: fields{
+				data: map[string]storage{
+					"t:1000": storage{
+						expired: -1,
+						vocabulary: map[string][]byte{
+							"name": []byte("Dmitry"),
+						},
+					},
+				},
+			},
+			want:    []byte("\n\rname:Dmitry"),
+			wantErr: false,
+		},
+		{
+			name: "Error key have another type",
+			args: args{key: "t:1000"},
+			fields: fields{
+				data: map[string]storage{
+					"t:1000": storage{
+						expired: -1,
+						str:     []byte("sdfsdf"),
+					},
+				},
+			},
+			want:    nil,
+			wantErr: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
