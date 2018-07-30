@@ -24,8 +24,11 @@ import (
 
 // A key-value stream backed by raft
 type raftNode struct {
-	confChangeC <-chan raftpb.ConfChange // proposed cluster config changes
-	commitC     chan *string             // entries committed to log
+	// proposed cluster config changes
+	confChangeC <-chan raftpb.ConfChange
+
+	// entries committed to log
+	commitC chan *string
 
 	// electionTick - количество вызовов Node.Tick, которые должны проходить между
 	// выборы. То есть, если follower не получает никакого сообщения от
@@ -34,16 +37,29 @@ type raftNode struct {
 	// HeartbeatTick. Мы предлагаем ElectionTick = 10 * HeartbeatTick, чтобы избежать
 	// ненужное переключение лидера.
 	electionTick int
+
 	// heartbeatTick - количество вызовов Node.Tick, которые должны проходить между
 	// сердцебиение. То есть лидер посылает сообщения о сердцебиении для поддержания своих
 	// лидерство каждый тибетский HeartbeatTick.
 	heartbeatTick int
-	id            int      // client ID for raft session
-	peers         []string // raft peer URLs
-	join          bool     // node is joining an existing cluster
-	waldir        string   // path to WAL directory
-	snapdir       string   // path to snapshot directory
-	lastIndex     uint64   // index of log at start
+
+	// client ID for raft session
+	id int
+
+	// raft peer URLs
+	peers []string
+
+	// node is joining an existing cluster
+	join bool
+
+	// path to WAL directory
+	waldir string
+
+	// path to snapshot directory
+	snapdir string
+
+	// index of log at start
+	lastIndex uint64
 
 	confState     raftpb.ConfState
 	snapshotIndex uint64
@@ -55,14 +71,19 @@ type raftNode struct {
 	appliedIndex uint64
 
 	// raft backing for the commit/error channel
-	node        raft.Node
-	raftStorage *raft.MemoryStorage
-	wal         *wal.WAL
+	node raft.Node
 
-	snapshotter      *snap.Snapshotter
-	snapshotterReady chan *snap.Snapshotter // signals when snapshotter is ready
+	raftStorage *raft.MemoryStorage
+
+	wal *wal.WAL
+
+	snapshotter *snap.Snapshotter
+
+	// signals when snapshotter is ready
+	snapshotterReady chan *snap.Snapshotter
 
 	snapCount uint64
+
 	transport *rafthttp.Transport
 }
 
@@ -95,7 +116,7 @@ func (s *Server) InitRaft() error {
 	var oldwal = wal.Exist(s.raft.waldir)
 	var err error
 
-	//Создаём дерикротию где будут храниться snapshots
+	//Создаём директорию где будут храниться snapshots
 	if err = creteSnapDirIfNotExist(s.raft.snapdir); err != nil {
 		return err
 	}

@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/gob"
-	"encoding/json"
 	"fmt"
 	"net"
 	"net/url"
@@ -357,32 +356,6 @@ func (s *Server) applyCMD(cmd cmd) error {
 		return s.st.expire(cmd.Key, cmd.Expire)
 	default:
 		return fmt.Errorf("Undefined cmd %s", cmd.Actions)
-	}
-}
-
-func (s *Server) loadFromSnapshot() error {
-	snapshot, err := s.raft.snapshotter.Load()
-	if err == snap.ErrNoSnapshot {
-		return nil
-	}
-	if err != nil {
-		return errors.Wrap(err, "load from snapshot")
-	}
-	s.logger.Infof("loading snapshot at term %d and index %d", snapshot.Metadata.Term, snapshot.Metadata.Index)
-	return json.Unmarshal(snapshot.Data, &s.st)
-}
-
-func (s *Server) getSnapshot() ([]byte, error) {
-	s.logger.Debug("get snapshot")
-	select {
-	case storages := <-s.getSnap:
-		var buf bytes.Buffer
-		if err := gob.NewEncoder(&buf).Encode(storages); err != nil {
-			return nil, err
-		}
-		return buf.Bytes(), nil
-	case <-time.After(time.Second * 1):
-		return nil, errors.New("Error time out getSnapshot")
 	}
 }
 

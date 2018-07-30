@@ -53,26 +53,26 @@ func (s *Server) openWAL(snapshot *raftpb.Snapshot) (*wal.WAL, error) {
 func (s *Server) replayWAL() (*wal.WAL, error) {
 	s.logger.Infof("replaying WAL of member %d", s.raft.id)
 
-	//Пробуем загрузить снапшот
+	// Пробуем загрузить снапшот
 	snapshot, err := s.loadSnapshot()
 	if err != nil {
 		return nil, err
 	}
 
-	//WAL используется для возврата данных с диска в память
-	//openWAL возвращает WALL, готовый для чтения.
+	// WAL используется для возврата данных с диска в память
+	// openWAL возвращает WALL, готовый для чтения.
 	w, err := s.openWAL(snapshot)
 	if err != nil {
 		return nil, err
 	}
 
-	//читаем данные с диска c помошью WAL
+	// Читаем данные с диска c помошью WAL
 	_, st, ents, err := w.ReadAll()
 	if err != nil {
 		return nil, fmt.Errorf("failed to read WAL (%v)", err)
 	}
 
-	//Загружаем данные в storage если snapshot не пуст
+	// Загружаем данные в storage если snapshot не пуст
 	if snapshot != nil {
 		s.raft.raftStorage.ApplySnapshot(*snapshot)
 
@@ -85,12 +85,12 @@ func (s *Server) replayWAL() (*wal.WAL, error) {
 		return nil, err
 	}
 
-	//добавьте в хранилище, чтобы raft стартовал в нужном месте в журнале
+	// Добавьте в хранилище, чтобы raft стартовал в нужном месте в журнале
 	if err := s.raft.raftStorage.Append(ents); err != nil {
 		return nil, err
 	}
 
-	// send nil once lastIndex is published so client knows commit channel is current
+	// Send nil once lastIndex is published so client knows commit channel is current
 	// отправить nil после опубликования последнего индекса, так что клиент знает, что канал фиксации текущий
 	if len(ents) > 0 {
 		s.raft.lastIndex = ents[len(ents)-1].Index

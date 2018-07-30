@@ -11,7 +11,7 @@ import (
 
 //Params contains the parameters to initial a server.
 type Params struct {
-	//ListenAddr
+	//The address the go-redis listens on for incoming TCP connections
 	ListenAddr *net.TCPAddr
 	//Список узлов в кластере разделённых запятой
 	RaftPeers string
@@ -43,49 +43,49 @@ type Params struct {
 func Param() (*Params, error) {
 	init := &Params{}
 
-	a := kingpin.New("go-redis", "Implementation redis on Go")
+	a := kingpin.New("go-redis", "Простая реализация redis на Go")
 	a.HelpFlag.Short('h')
 
-	a.Flag("listen.addr", "The address the go-redis listens on for incoming TCP connections").
+	a.Flag("listen.addr", "Адресс который будет слушать GoRedis для входящих TCP соединений").
 		Envar("LISTEN_ADDR").
 		Default("0.0.0.0:3000").
 		TCPVar(&init.ListenAddr)
 
-	a.Flag("initial-cluster", "comma separated cluster peers").
+	a.Flag("initial-cluster", "Разделенные запятой участники кластера").
 		Envar("INITIAL_CLUSTER").
 		Default("http://127.0.0.1:9021").
 		StringVar(&init.RaftPeers)
 
-	a.Flag("raft-data-dir", "data dir").
+	a.Flag("raft-data-dir", "Директория для данных и snapshots").
 		Envar("RAFT_DATA_DIR").
 		Default("data").
 		StringVar(&init.RaftDataDir)
 
-	a.Flag("join", "join an existing cluster").
-		Envar("JOIN").
-		BoolVar(&init.RaftJoin)
+	// a.Flag("join", "Необходимо установить в true если небходимо добавить узел в кластер").
+	// 	Envar("JOIN").
+	// 	BoolVar(&init.RaftJoin)
 
-	a.Flag("id", "node ID").
+	a.Flag("id", "Уникальный идентификатор узла").
 		Envar("ID").
 		Default("1").
 		IntVar(&init.NodeID)
 
-	a.Flag("snap-count", "").
+	a.Flag("snap-count", "Переодичность снятия snapshots").
 		Envar("SNAP_COUNT").
 		Default("10000").
 		Uint64Var(&init.SnapCount)
 
-	a.Flag("election-tick", "").
+	a.Flag("election-tick", "ElectionTick - количество вызовов Node.Tick, которые должны проходить междувыборы. То есть, если follower не получает никакого сообщения от лидер текущего term до истечения ElectionTick, он станет кандидат и начать выборы. ElectionTick должно быть больше, чем HeartbeatTick. Мы предлагаем ElectionTick = 10 * HeartbeatTick, чтобы избежать ненужное переключение лидера").
 		Envar("ELECTION_TICK").
 		Default("10").
 		IntVar(&init.ElectionTick)
 
-	a.Flag("heartbeat-tick", "").
+	a.Flag("heartbeat-tick", "HeartbeatTick - количество вызовов Node.Tick, которые должны проходить между heartbeat. То есть лидер посылает сообщения о heartbeat для поддержания своих лидерство каждый HeartbeatTick ticks").
 		Envar("HEARTBEAT_TICK").
 		Default("1").
 		IntVar(&init.HeartbeatTick)
 
-	a.Flag("idle-timeout", "").
+	a.Flag("idle-timeout", "Тайм-аут ожидания закрытия TCP соединения").
 		Envar("IDLE_TIMEOUT").
 		Default("90s").
 		DurationVar(&init.IdleTimeout)
